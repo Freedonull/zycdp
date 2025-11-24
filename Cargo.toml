@@ -69,7 +69,7 @@ _fetcher-rustls-async-std = [
     "fetcher",
     "chromiumoxide_fetcher/_rustls-async-std",
 ]
-_fetcher-rusttls-tokio = ["fetcher", "chromiumoxide_fetcher/_rustls-tokio"]
+_fetcher-rustls-tokio = ["fetcher", "chromiumoxide_fetcher/_rustls-tokio"]
 _fetcher-native-async-std = [
     "fetcher",
     "chromiumoxide_fetcher/_native-async-std",

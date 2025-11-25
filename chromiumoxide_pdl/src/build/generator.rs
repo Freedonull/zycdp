@@ -14,6 +14,7 @@ use crate::build::builder::Builder;
 use crate::build::event::{EventBuilder, EventType};
 use crate::build::types::*;
 use crate::pdl::parser::parse_pdl;
+use crate::pdl::resolver::resolve_pdl;
 use crate::pdl::{DataType, Domain, Param, Protocol, Type, Variant};
 
 /// Compile `.pdl` files into Rust files during a Cargo build.
@@ -173,7 +174,10 @@ impl Generator {
             let mod_name = file_name.to_string_lossy().to_string();
             self.protocol_mods.push(mod_name);
 
-            inputs.push(fs::read_to_string(path)?);
+            let input = fs::read_to_string(path)?;
+            let resolved =
+                resolve_pdl(path, &input).map_err(|e| Error::new(ErrorKind::Other, e.message))?;
+            inputs.push(resolved);
         }
 
         let mut protocols = vec![];

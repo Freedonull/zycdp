@@ -19,7 +19,7 @@ impl<'a> Iterator for DomainDataTypeIter<'a> {
             return Some(DomainDatatype::Type(ty));
         }
         if let Some(cmd) = self.commands.next() {
-            return Some(DomainDatatype::Commnad(cmd));
+            return Some(DomainDatatype::Command(cmd));
         }
         if let Some(ev) = self.events.next() {
             return Some(DomainDatatype::Event(ev));
@@ -43,7 +43,7 @@ impl<'a> IntoIterator for &'a Domain<'a> {
 
 pub enum DomainDatatype<'a> {
     Type(&'a TypeDef<'a>),
-    Commnad(&'a Command<'a>),
+    Command(&'a Command<'a>),
     Event(&'a Event<'a>),
 }
 
@@ -53,7 +53,7 @@ impl<'a> DomainDatatype<'a> {
     }
 
     pub fn is_command(&self) -> bool {
-        matches!(self, DomainDatatype::Commnad(_))
+        matches!(self, DomainDatatype::Command(_))
     }
 
     pub fn is_event(&self) -> bool {
@@ -69,7 +69,7 @@ impl<'a> DomainDatatype<'a> {
 
         let url = match self {
             DomainDatatype::Type(ty) => format!("{}{}/#type-{}", base_url, domain_name, ty.name()),
-            DomainDatatype::Commnad(cmd) => {
+            DomainDatatype::Command(cmd) => {
                 format!("{}{}/#method-{}", base_url, domain_name, cmd.name())
             }
             DomainDatatype::Event(ev) => {
@@ -90,7 +90,7 @@ impl<'a> DomainDatatype<'a> {
     pub fn ident_name(&self) -> String {
         match self {
             DomainDatatype::Type(_ty) => self.name().to_upper_camel_case(),
-            DomainDatatype::Commnad(cmd) => format!("{}Params", cmd.name().to_upper_camel_case()),
+            DomainDatatype::Command(cmd) => format!("{}Params", cmd.name().to_upper_camel_case()),
             DomainDatatype::Event(event) => format!("Event{}", event.name().to_upper_camel_case()),
         }
     }
@@ -104,7 +104,7 @@ impl<'a> DomainDatatype<'a> {
                     [].iter()
                 }
             }
-            DomainDatatype::Commnad(cmd) => cmd.parameters.iter(),
+            DomainDatatype::Command(cmd) => cmd.parameters.iter(),
             DomainDatatype::Event(ev) => ev.parameters.iter(),
         }
     }
@@ -125,7 +125,7 @@ impl<'a> DomainDatatype<'a> {
     pub fn raw_name(&self) -> &'a str {
         match self {
             DomainDatatype::Type(ty) => ty.raw_name.as_ref(),
-            DomainDatatype::Commnad(cmd) => cmd.raw_name.as_ref(),
+            DomainDatatype::Command(cmd) => cmd.raw_name.as_ref(),
             DomainDatatype::Event(ev) => ev.raw_name.as_ref(),
         }
     }
@@ -135,7 +135,7 @@ impl<'a> DataType for DomainDatatype<'a> {
     fn is_circular_dep(&self) -> bool {
         match self {
             DomainDatatype::Type(inner) => inner.is_circular_dep(),
-            DomainDatatype::Commnad(inner) => inner.is_circular_dep(),
+            DomainDatatype::Command(inner) => inner.is_circular_dep(),
             DomainDatatype::Event(inner) => inner.is_circular_dep(),
         }
     }
@@ -143,7 +143,7 @@ impl<'a> DataType for DomainDatatype<'a> {
     fn is_experimental(&self) -> bool {
         match self {
             DomainDatatype::Type(inner) => inner.is_experimental(),
-            DomainDatatype::Commnad(inner) => inner.is_experimental(),
+            DomainDatatype::Command(inner) => inner.is_experimental(),
             DomainDatatype::Event(inner) => inner.is_experimental(),
         }
     }
@@ -151,7 +151,7 @@ impl<'a> DataType for DomainDatatype<'a> {
     fn description(&self) -> Option<&str> {
         match self {
             DomainDatatype::Type(inner) => inner.description(),
-            DomainDatatype::Commnad(inner) => inner.description(),
+            DomainDatatype::Command(inner) => inner.description(),
             DomainDatatype::Event(inner) => inner.description(),
         }
     }
@@ -159,7 +159,7 @@ impl<'a> DataType for DomainDatatype<'a> {
     fn name(&self) -> &str {
         match self {
             DomainDatatype::Type(inner) => inner.name(),
-            DomainDatatype::Commnad(inner) => inner.name(),
+            DomainDatatype::Command(inner) => inner.name(),
             DomainDatatype::Event(inner) => inner.name(),
         }
     }
@@ -167,7 +167,7 @@ impl<'a> DataType for DomainDatatype<'a> {
     fn is_deprecated(&self) -> bool {
         match self {
             DomainDatatype::Type(inner) => inner.is_deprecated(),
-            DomainDatatype::Commnad(inner) => inner.is_deprecated(),
+            DomainDatatype::Command(inner) => inner.is_deprecated(),
             DomainDatatype::Event(inner) => inner.is_deprecated(),
         }
     }

@@ -21,6 +21,7 @@ fn generated_code_is_fresh() {
         .out_dir(tmp.path())
         .experimental(env::var("CDP_NO_EXPERIMENTAL").is_err())
         .deprecated(env::var("CDP_DEPRECATED").is_ok())
+        .allowed_deprecated_type("emulateNetworkConditions")
         .compile_pdls(&[js_proto, browser_proto])
         .unwrap();
 

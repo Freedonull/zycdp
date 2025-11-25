@@ -57,6 +57,7 @@ pub struct Generator {
     serde_support: SerdeSupport,
     with_experimental: bool,
     with_deprecated: bool,
+    allowed_deprecated_type: HashSet<String>,
     out_dir: Option<PathBuf>,
     protocol_mods: Vec<String>,
     domains: HashMap<String, usize>,
@@ -79,6 +80,7 @@ impl Default for Generator {
             serde_support: Default::default(),
             with_experimental: true,
             with_deprecated: false,
+            allowed_deprecated_type: HashSet::new(),
             out_dir: None,
             protocol_mods: Vec::new(),
             domains: Default::default(),
@@ -124,6 +126,12 @@ impl Generator {
     /// Configures whether deprecated types and fields should be included.
     pub fn deprecated(&mut self, deprecated: bool) -> &mut Self {
         self.with_deprecated = deprecated;
+        self
+    }
+
+    /// Configures a type name that is allowed to be deprecated.
+    pub fn allowed_deprecated_type(&mut self, type_name: impl Into<String>) -> &mut Self {
+        self.allowed_deprecated_type.insert(type_name.into());
         self
     }
 
@@ -438,10 +446,15 @@ impl Generator {
         let mut stream = self.serde_support.generate_serde_imports();
         let with_deprecated = self.with_deprecated;
         let with_experimental = self.with_experimental;
+        let allowed_deprecated_type = self.allowed_deprecated_type.clone();
         stream.extend(
             domain
                 .into_iter()
-                .filter(|dt| with_deprecated || !dt.is_deprecated())
+                .filter(|dt| {
+                    with_deprecated
+                        || !dt.is_deprecated()
+                        || allowed_deprecated_type.contains(dt.name())
+                })
                 .filter(|dt| with_experimental || !dt.is_experimental())
                 .map(|ty| self.generate_type(domain, ty)),
         );
@@ -487,7 +500,7 @@ impl Generator {
                 });
             }
 
-            if let DomainDatatype::Commnad(cmd) = dt {
+            if let DomainDatatype::Command(cmd) = dt {
                 let returns_name = format!("{}Returns", cmd.name().to_upper_camel_case());
                 let with_deprecated = self.with_deprecated;
                 let with_experimental = self.with_experimental;

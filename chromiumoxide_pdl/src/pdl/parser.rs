@@ -10,6 +10,7 @@ use std::fmt;
 macro_rules! regex {
     ($re:literal $(,)?) => {{
         static RE: once_cell::sync::OnceCell<regex::Regex> = once_cell::sync::OnceCell::new();
+        #[allow(clippy::regex_creation_in_loops)]
         RE.get_or_init(|| regex::Regex::new($re).unwrap())
     }};
 }
@@ -60,7 +61,7 @@ macro_rules! borrowed {
 /// Rewrite of the Python script from the Chromium source tree.
 ///
 ///  See: https://chromium.googlesource.com/deps/inspector_protocol/+/refs/heads/master/pdl.py
-pub fn parse_pdl(input: &str) -> Result<Protocol, Error> {
+pub fn parse_pdl(input: &str) -> Result<Protocol<'_>, Error> {
     let mut protocol = Protocol::default();
     let mut description: Option<String> = None;
     let mut version = None;

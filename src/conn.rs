@@ -40,11 +40,9 @@ pub struct Connection<T: EventMessage> {
 
 impl<T: EventMessage + Unpin> Connection<T> {
     pub async fn connect(debug_ws_url: impl AsRef<str>) -> Result<Self> {
-        let config = WebSocketConfig {
-            max_message_size: None,
-            max_frame_size: None,
-            ..Default::default()
-        };
+        let config = WebSocketConfig::default()
+            .max_message_size(None)
+            .max_frame_size(None);
 
         cfg_if::cfg_if! {
             if #[cfg(feature = "async-std-runtime")] {
@@ -146,8 +144,9 @@ impl<T: EventMessage + Unpin> Stream for Connection<T> {
                         Ok(msg)
                     }
                     Err(err) => {
-                        tracing::debug!(target: "chromiumoxide::conn::raw_ws::parse_errors", msg = text, "Failed to parse raw WS message {}", err);
-                        Err(CdpError::InvalidMessage(text, err))
+                        let msg = text.as_str().to_string();
+                        tracing::debug!(target: "chromiumoxide::conn::raw_ws::parse_errors", msg, "Failed to parse raw WS message {}", err);
+                        Err(CdpError::InvalidMessage(text.as_str().to_string(), err))
                     }
                 };
                 Poll::Ready(Some(ready))

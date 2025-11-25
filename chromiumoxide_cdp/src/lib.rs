@@ -11,6 +11,7 @@ use crate::revision::Revision;
 #[allow(clippy::multiple_bound_locations)]
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[allow(unreachable_patterns)]
+#[allow(deprecated)]
 pub mod cdp;
 pub mod revision;
 
@@ -29,7 +30,7 @@ pub mod revision;
 // is generally a good idea.
 
 /// Currently built CDP revision
-pub const CURRENT_REVISION: Revision = Revision(1354347);
+pub const CURRENT_REVISION: Revision = Revision(1519099);
 
 /// convenience fixups
 impl Default for CreateTargetParams {

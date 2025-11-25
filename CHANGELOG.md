@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Update `async-tungstenite` to 0.32.0
 - Update `which` to 8.0.0
 - Replace `winreg` by `windows-registry`
+- Updated PDL to r1519099 (Chromium 142.0.7431.0)
+- Updated fetcher to r1520176 (Chromium 142.0.7435.0)
 
 ### Added
 

@@ -2,6 +2,7 @@ use chromiumoxide_cdp::cdp::browser_protocol::fetch::{
     self, AuthChallengeResponse, AuthChallengeResponseResponse, ContinueRequestParams,
     ContinueWithAuthParams, DisableParams, EventAuthRequired, EventRequestPaused, RequestPattern,
 };
+#[allow(deprecated)]
 use chromiumoxide_cdp::cdp::browser_protocol::network::{
     EmulateNetworkConditionsParams, EventLoadingFailed, EventLoadingFinished,
     EventRequestServedFromCache, EventRequestWillBeSent, EventResponseReceived, Headers,
@@ -175,6 +176,9 @@ impl NetworkManager {
         }
         self.offline = value;
         self.push_cdp_request(
+            // This event was recently deprecated, so we continue to use it for now
+            // if some users are on older versions of chromium.
+            #[allow(deprecated)]
             EmulateNetworkConditionsParams::builder()
                 .offline(self.offline)
                 .latency(0)

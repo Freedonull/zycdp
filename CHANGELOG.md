@@ -9,7 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Updated `async-tungstenite` to 0.32.0
+- Bumped MSRV to 1.85 to support edition 2024
+- Update `async-tungstenite` to 0.32.0
+- Update `which` to 8.0.0
 - Replace `winreg` by `windows-registry`
 
 ### Added

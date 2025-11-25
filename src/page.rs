@@ -101,11 +101,11 @@ impl Page {
                         if (parameter === 37445) {
                             return 'Google Inc. (NVIDIA)';
                         }
-    
+
                         if (parameter === 37446) {
                             return 'ANGLE (NVIDIA, NVIDIA GeForce GTX 1050 Direct3D11 vs_5_0 ps_5_0, D3D11-27.21.14.5671)';
                         }
-    
+
                         return getParameter(parameter);
                     };
                 "
@@ -1291,7 +1291,7 @@ impl ScreenshotParams {
                 .cdp_params
                 .format
                 .as_ref()
-                .map_or(true, |f| f == &CaptureScreenshotFormat::Png)
+                .is_none_or(|f| f == &CaptureScreenshotFormat::Png)
     }
 }
 

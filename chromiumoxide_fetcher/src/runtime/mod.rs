@@ -1,15 +1,56 @@
 use anyhow::Context;
+use serde::Deserialize;
 use std::path::{Path, PathBuf};
 
-use super::ZipArchive;
+use self::zip::ZipArchive;
+
+mod zip;
 
 #[derive(Debug, Default)]
-pub struct BrowserFetcherRuntime;
+pub struct Runtime;
 
 #[cfg(feature = "async-std-runtime")]
-impl BrowserFetcherRuntime {
+impl Runtime {
     pub async fn exists(folder_path: &Path) -> bool {
         async_std::fs::metadata(folder_path).await.is_ok()
+    }
+
+    pub async fn download_json<T>(url: &str) -> anyhow::Result<T>
+    where
+        T: for<'de> Deserialize<'de>,
+    {
+        use surf::http;
+
+        let url = url.parse::<surf::Url>().context("Invalid metadata url")?;
+        let mut res = surf::RequestBuilder::new(http::Method::Get, url)
+            .await
+            .map_err(|e| e.into_inner())
+            .context("Failed to send request to host")?;
+        if res.status() != surf::StatusCode::Ok {
+            anyhow::bail!("Invalid metadata url");
+        }
+        let body = res
+            .body_json::<T>()
+            .await
+            .map_err(|e| e.into_inner().context("Failed to read response body"))?;
+        Ok(body)
+    }
+
+    pub async fn download_text(url: &str) -> anyhow::Result<String> {
+        use surf::http;
+        let url = url.parse::<surf::Url>().context("Invalid metadata url")?;
+        let mut res = surf::RequestBuilder::new(http::Method::Get, url)
+            .await
+            .map_err(|e| e.into_inner())
+            .context("Failed to send request to host")?;
+        if res.status() != surf::StatusCode::Ok {
+            anyhow::bail!("Invalid metadata url");
+        }
+        let body = res
+            .body_string()
+            .await
+            .map_err(|e| e.into_inner().context("Failed to read response body"))?;
+        Ok(body)
     }
 
     pub async fn download(url: &str, archive_path: &Path) -> anyhow::Result<()> {
@@ -47,9 +88,43 @@ impl BrowserFetcherRuntime {
 }
 
 #[cfg(feature = "tokio-runtime")]
-impl BrowserFetcherRuntime {
+impl Runtime {
     pub async fn exists(folder_path: &Path) -> bool {
         tokio::fs::metadata(folder_path).await.is_ok()
+    }
+
+    pub async fn download_json<T>(url: &str) -> anyhow::Result<T>
+    where
+        T: for<'de> Deserialize<'de>,
+    {
+        let url = url
+            .parse::<reqwest::Url>()
+            .context("Invalid metadata url")?;
+        let res = reqwest::get(url)
+            .await
+            .context("Failed to send request to host")?;
+        if res.status() != reqwest::StatusCode::OK {
+            anyhow::bail!("Invalid metadata url");
+        }
+        let body = res
+            .json::<T>()
+            .await
+            .context("Failed to read response body")?;
+        Ok(body)
+    }
+
+    pub async fn download_text(url: &str) -> anyhow::Result<String> {
+        let url = url
+            .parse::<reqwest::Url>()
+            .context("Invalid metadata url")?;
+        let res = reqwest::get(url)
+            .await
+            .context("Failed to send request to host")?;
+        if res.status() != reqwest::StatusCode::OK {
+            anyhow::bail!("Invalid metadata url");
+        }
+        let body = res.text().await.context("Failed to read response body")?;
+        Ok(body)
     }
 
     pub async fn download(url: &str, archive_path: &Path) -> anyhow::Result<()> {

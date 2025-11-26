@@ -3,22 +3,16 @@ use std::path::PathBuf;
 use directories::BaseDirs;
 
 use crate::error::{FetcherError, Result};
-use crate::{Platform, Revision, CURRENT_REVISION};
+use crate::{BrowserHost, BrowserKind, BrowserVersion, Platform};
 
 const CACHE_NAME: &str = "chromiumoxide";
-const DEFAULT_HOST: &str = "https://storage.googleapis.com";
 
 /// Options for the fetcher
 pub struct BrowserFetcherOptions {
-    /// The desired browser revision.
+    /// The host that will be used for downloading browsers and metadata.
     ///
-    /// defaults to CURRENT_REVISION
-    pub(crate) revision: Revision,
-
-    /// The host that will be used for downloading.
-    ///
-    /// defaults to https://storage.googleapis.com
-    pub(crate) host: String,
+    /// defaults to something sensible for the given browser kind
+    pub(crate) host: BrowserHost,
 
     /// The path to download browsers to.
     ///
@@ -29,6 +23,16 @@ pub struct BrowserFetcherOptions {
     ///
     /// defaults to the currently used platform
     pub(crate) platform: Platform,
+
+    /// The kind of browser to download.
+    ///
+    /// defaults to Chromium
+    pub(crate) kind: BrowserKind,
+
+    /// The desired browser revision.
+    ///
+    /// defaults to something sensible for the given browser kind
+    pub(crate) version: BrowserVersion,
 }
 
 impl BrowserFetcherOptions {
@@ -44,19 +48,15 @@ impl BrowserFetcherOptions {
 
 #[derive(Default)]
 pub struct BrowserFetcherOptionsBuilder {
-    revision: Option<Revision>,
-    host: Option<String>,
+    host: Option<BrowserHost>,
     path: Option<PathBuf>,
     platform: Option<Platform>,
+    kind: Option<BrowserKind>,
+    version: Option<BrowserVersion>,
 }
 
 impl BrowserFetcherOptionsBuilder {
-    pub fn with_revision<T: Into<Revision>>(mut self, revision: T) -> Self {
-        self.revision = Some(revision.into());
-        self
-    }
-
-    pub fn with_host<T: Into<String>>(mut self, host: T) -> Self {
+    pub fn with_host<T: Into<BrowserHost>>(mut self, host: T) -> Self {
         self.host = Some(host.into());
         self
     }
@@ -68,6 +68,16 @@ impl BrowserFetcherOptionsBuilder {
 
     pub fn with_platform<T: Into<Platform>>(mut self, platform: T) -> Self {
         self.platform = Some(platform.into());
+        self
+    }
+
+    pub fn with_kind<T: Into<BrowserKind>>(mut self, kind: T) -> Self {
+        self.kind = Some(kind.into());
+        self
+    }
+
+    pub fn with_version<T: Into<BrowserVersion>>(mut self, version: T) -> Self {
+        self.version = Some(version.into());
         self
     }
 
@@ -91,11 +101,20 @@ impl BrowserFetcherOptionsBuilder {
                     std::env::consts::ARCH,
                 ))?;
 
+        let kind = self.kind.unwrap_or_default();
+
+        let version = self
+            .version
+            .unwrap_or_else(|| BrowserVersion::current(kind));
+
+        let host = self.host.unwrap_or_else(|| BrowserHost::current(kind));
+
         Ok(BrowserFetcherOptions {
-            revision: self.revision.unwrap_or(CURRENT_REVISION),
-            host: self.host.unwrap_or_else(|| DEFAULT_HOST.to_string()),
+            host,
             path,
             platform,
+            kind,
+            version,
         })
     }
 }

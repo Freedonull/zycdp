@@ -1,24 +1,30 @@
 use std::path::PathBuf;
 
-use super::{BrowserFetcherOptions, BrowserFetcherRevisionInfo, BrowserFetcherRuntime};
+pub use self::options::BrowserFetcherOptions;
+pub use self::revision_info::BrowserFetcherRevisionInfo;
 use crate::error::{FetcherError, Result};
-use crate::{Platform, Revision};
+use crate::{BrowserHost, BrowserKind, BrowserVersion, Platform, Runtime};
+
+mod options;
+mod revision_info;
 
 /// A [`BrowserFetcher`] used to download and install a version of chromium.
 pub struct BrowserFetcher {
-    revision: Revision,
-    host: String,
+    host: BrowserHost,
     path: PathBuf,
     platform: Platform,
+    kind: BrowserKind,
+    version: BrowserVersion,
 }
 
 impl BrowserFetcher {
     pub fn new(options: BrowserFetcherOptions) -> Self {
         Self {
-            revision: options.revision,
             host: options.host,
             path: options.path,
             platform: options.platform,
+            kind: options.kind,
+            version: options.version,
         }
     }
 
@@ -43,18 +49,21 @@ impl BrowserFetcher {
 
     async fn local(&self) -> bool {
         let folder_path = self.folder_path();
-        BrowserFetcherRuntime::exists(&folder_path).await
+        Runtime::exists(&folder_path).await
     }
 
     async fn download(&self) -> Result<()> {
-        let url = self.platform.download_url(&self.host, &self.revision);
+        let url = self
+            .kind
+            .download_url(self.version, self.platform, &self.host)
+            .await?;
         let folder_path = self.folder_path();
         let archive_path = folder_path.with_extension("zip");
 
-        BrowserFetcherRuntime::download(&url, &archive_path)
+        Runtime::download(&url, &archive_path)
             .await
             .map_err(FetcherError::DownloadFailed)?;
-        BrowserFetcherRuntime::unzip(archive_path, folder_path)
+        Runtime::unzip(archive_path, folder_path)
             .await
             .map_err(FetcherError::InstallFailed)?;
 

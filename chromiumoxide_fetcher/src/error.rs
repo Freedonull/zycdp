@@ -1,4 +1,4 @@
-use std::num::ParseIntError;
+use crate::version::VersionError;
 
 use thiserror::Error;
 
@@ -6,8 +6,12 @@ pub type Result<T, E = FetcherError> = std::result::Result<T, E>;
 
 #[derive(Debug, Error)]
 pub enum FetcherError {
-    #[error("Invalid browser revision")]
-    InvalidRevision(#[source] ParseIntError),
+    #[error("Invalid browser version")]
+    InvalidVersion(
+        #[from]
+        #[source]
+        VersionError,
+    ),
 
     #[error("No path available to download browsers to")]
     NoPathAvailable,

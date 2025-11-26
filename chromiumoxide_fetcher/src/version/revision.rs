@@ -37,7 +37,7 @@ impl Revision {
                 else {
                     return Err(VersionError::InvalidRevision(self.to_string()));
                 };
-                Ok(BuildInfo::version(
+                Ok(BuildInfo::both(
                     version.version.clone(),
                     version.revision.parse()?,
                 ))

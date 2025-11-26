@@ -33,7 +33,7 @@ impl Milestone {
                 else {
                     return Err(VersionError::InvalidMilestone(self.to_string()));
                 };
-                Ok(BuildInfo::version(
+                Ok(BuildInfo::both(
                     version.version.clone(),
                     version.revision.parse()?,
                 ))

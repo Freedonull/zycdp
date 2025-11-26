@@ -18,9 +18,9 @@
 //! }
 //! ```
 
-use self::build_info::BuildInfo;
+pub use self::build_info::BuildInfo;
 pub use self::error::FetcherError;
-pub use self::fetcher::{BrowserFetcher, BrowserFetcherOptions, BrowserFetcherRevisionInfo};
+pub use self::fetcher::{BrowserFetcher, BrowserFetcherInstallation, BrowserFetcherOptions};
 pub use self::host::BrowserHost;
 pub use self::kind::BrowserKind;
 pub use self::platform::Platform;

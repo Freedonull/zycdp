@@ -13,6 +13,7 @@ mod error;
 mod metadata;
 mod milestone;
 mod revision;
+#[allow(clippy::module_inception)]
 mod version;
 
 /// Represents a version of a browser.
@@ -28,7 +29,8 @@ pub enum BrowserVersion {
 }
 
 impl BrowserVersion {
-    pub(crate) fn current(kind: BrowserKind) -> Self {
+    #[doc(hidden)] // internal API
+    pub fn current(kind: BrowserKind) -> Self {
         // The chromium revision is hard to get right and the relation to the CDP revision
         // even more so, so here are some guidances.
         //

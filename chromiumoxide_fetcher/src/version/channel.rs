@@ -65,7 +65,7 @@ impl Channel {
                 let Some(version) = last_known_good_versions.channels.get(self.as_key()) else {
                     return Err(VersionError::InvalidChannel(self.to_string()));
                 };
-                Ok(BuildInfo::version(
+                Ok(BuildInfo::both(
                     version.version.clone(),
                     version.revision.parse()?,
                 ))

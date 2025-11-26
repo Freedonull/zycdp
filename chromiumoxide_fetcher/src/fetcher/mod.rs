@@ -1,12 +1,12 @@
 use std::path::PathBuf;
 
+pub use self::installation::BrowserFetcherInstallation;
 pub use self::options::BrowserFetcherOptions;
-pub use self::revision_info::BrowserFetcherRevisionInfo;
 use crate::error::{FetcherError, Result};
-use crate::{BrowserHost, BrowserKind, BrowserVersion, Platform, Runtime};
+use crate::{BrowserHost, BrowserKind, BrowserVersion, BuildInfo, Platform, Runtime};
 
+mod installation;
 mod options;
-mod revision_info;
 
 /// A [`BrowserFetcher`] used to download and install a version of chromium.
 pub struct BrowserFetcher {
@@ -39,25 +39,29 @@ impl BrowserFetcher {
     /// If providing a custom host, make sure files are in the same places as
     /// the official builds otherwise the installation will succeed but the runtime
     /// will fail.
-    pub async fn fetch(&self) -> Result<BrowserFetcherRevisionInfo> {
-        if !self.local().await {
-            self.download().await?;
+    pub async fn fetch(&self) -> Result<BrowserFetcherInstallation> {
+        let build_info = self
+            .version
+            .resolve(self.kind, self.platform, &self.host)
+            .await?;
+
+        if !self.local(&build_info).await {
+            self.download(&build_info).await?;
         }
 
-        Ok(self.revision_info())
+        Ok(self.installation(build_info))
     }
 
-    async fn local(&self) -> bool {
-        let folder_path = self.folder_path();
+    async fn local(&self, build_info: &BuildInfo) -> bool {
+        let folder_path = self.folder_path(build_info);
         Runtime::exists(&folder_path).await
     }
 
-    async fn download(&self) -> Result<()> {
+    async fn download(&self, build_info: &BuildInfo) -> Result<()> {
         let url = self
             .kind
-            .download_url(self.version, self.platform, &self.host)
-            .await?;
-        let folder_path = self.folder_path();
+            .download_url(self.platform, build_info, &self.host);
+        let folder_path = self.folder_path(build_info);
         let archive_path = folder_path.with_extension("zip");
 
         Runtime::download(&url, &archive_path)
@@ -70,19 +74,21 @@ impl BrowserFetcher {
         Ok(())
     }
 
-    fn folder_path(&self) -> PathBuf {
+    fn folder_path(&self, build_info: &BuildInfo) -> PathBuf {
         let mut folder_path = self.path.clone();
-        folder_path.push(self.platform.folder_name(&self.revision));
+        folder_path.push(self.platform.folder_name(build_info));
         folder_path
     }
 
-    fn revision_info(&self) -> BrowserFetcherRevisionInfo {
-        let folder_path = self.folder_path();
-        let executable_path = self.platform.executable(&folder_path, &self.revision);
-        BrowserFetcherRevisionInfo {
+    fn installation(&self, build_info: BuildInfo) -> BrowserFetcherInstallation {
+        let folder_path = self.folder_path(&build_info);
+        let executable_path = self
+            .kind
+            .executable(self.platform, &build_info, &folder_path);
+        BrowserFetcherInstallation {
             folder_path,
             executable_path,
-            revision: self.revision.clone(),
+            build_info,
         }
     }
 }

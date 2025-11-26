@@ -7,11 +7,22 @@ pub struct BrowserHost {
 }
 
 impl BrowserHost {
-    pub fn new(object: String, metadata: String) -> Self {
-        Self { object, metadata }
+    pub fn new(object: &str, metadata: &str) -> Self {
+        Self {
+            object: object.to_string(),
+            metadata: metadata.to_string(),
+        }
     }
 
-    pub(crate) fn current(kind: BrowserKind) -> Self {
+    pub fn single(host: &str) -> Self {
+        Self {
+            object: host.to_string(),
+            metadata: host.to_string(),
+        }
+    }
+
+    #[doc(hidden)] // internal API
+    pub fn current(kind: BrowserKind) -> Self {
         match kind {
             BrowserKind::Chromium => Self {
                 object: "https://storage.googleapis.com".to_string(),

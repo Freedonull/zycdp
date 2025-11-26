@@ -39,7 +39,9 @@ impl Version {
                 "Build not supported for chromium"
             ))),
             BrowserKind::Chrome | BrowserKind::ChromeHeadlessShell => {
-                // TODO: Add support for patch versions
+                if self.patch.is_some() {
+                    return Ok(BuildInfo::version(self.to_string()));
+                }
 
                 let url = format!(
                     "{host}/chrome-for-testing/latest-patch-versions-per-build.json",
@@ -55,7 +57,7 @@ impl Version {
                 else {
                     return Err(VersionError::InvalidBuild(self.to_string()));
                 };
-                Ok(BuildInfo::version(
+                Ok(BuildInfo::both(
                     version.version.clone(),
                     version.revision.parse()?,
                 ))

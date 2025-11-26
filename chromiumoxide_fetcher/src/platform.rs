@@ -1,4 +1,4 @@
-use crate::Revision;
+use crate::BuildInfo;
 
 /// List of platforms with pre-built chromium binaries
 #[derive(Clone, Copy, Debug)]
@@ -11,7 +11,18 @@ pub enum Platform {
 }
 
 impl Platform {
-    pub(crate) fn folder_name(&self, revision: &Revision) -> String {
+    /// List of all platforms.
+    pub fn all() -> &'static [Platform] {
+        &[
+            Self::Linux,
+            Self::Mac,
+            Self::MacArm,
+            Self::Win32,
+            Self::Win64,
+        ]
+    }
+
+    pub(crate) fn folder_name(&self, build_info: &BuildInfo) -> String {
         let platform = match self {
             Self::Linux => "linux",
             Self::Mac => "mac",
@@ -19,7 +30,7 @@ impl Platform {
             Self::Win32 => "win32",
             Self::Win64 => "win64",
         };
-        format!("{platform}-{revision}")
+        format!("{platform}-{build_id}", build_id = build_info.id)
     }
 
     pub(crate) fn current() -> Option<Platform> {

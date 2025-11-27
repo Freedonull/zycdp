@@ -116,3 +116,28 @@ impl TryFrom<String> for Version {
         Self::from_str(&value)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_version_resolve_chrome() {
+        let host = BrowserHost::current(BrowserKind::Chrome);
+        let build_info = Version::new(113, 0, 5672)
+            .resolve(BrowserKind::Chrome, &host)
+            .await
+            .unwrap();
+        assert_eq!(build_info.id, "113.0.5672.63");
+    }
+
+    #[tokio::test]
+    async fn test_version_resolve_chrome_patch() {
+        let host = BrowserHost::current(BrowserKind::Chrome);
+        let build_info = Version::exact(113, 0, 5672, 62)
+            .resolve(BrowserKind::Chrome, &host)
+            .await
+            .unwrap();
+        assert_eq!(build_info.id, "113.0.5672.62");
+    }
+}

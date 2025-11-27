@@ -1,3 +1,5 @@
+use std::fmt;
+
 use crate::BuildInfo;
 
 /// List of platforms with pre-built chromium binaries
@@ -8,6 +10,22 @@ pub enum Platform {
     MacArm,
     Win32,
     Win64,
+}
+
+impl fmt::Display for Platform {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::Linux => "linux-x64",
+                Self::Mac => "macos-x64",
+                Self::MacArm => "macos-aarch64",
+                Self::Win32 => "windows-x86",
+                Self::Win64 => "windows-x64",
+            }
+        )
+    }
 }
 
 impl Platform {

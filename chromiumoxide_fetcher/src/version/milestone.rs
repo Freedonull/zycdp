@@ -72,3 +72,18 @@ impl From<u32> for Milestone {
         Self(value)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_milestone_resolve_chrome() {
+        let host = BrowserHost::current(BrowserKind::Chrome);
+        let build_info = Milestone::new(113)
+            .resolve(BrowserKind::Chrome, &host)
+            .await
+            .unwrap();
+        assert_eq!(build_info.id, "113.0.5672.63");
+    }
+}

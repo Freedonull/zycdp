@@ -45,6 +45,7 @@ impl BrowserFetcher {
             .resolve(self.kind, self.platform, &self.host)
             .await?;
 
+        tracing::debug!(target: "chromiumoxide_fetcher::fetch", build_info = ?build_info, "Build info");
         if !self.local(&build_info).await {
             self.download(&build_info).await?;
         }
@@ -54,7 +55,10 @@ impl BrowserFetcher {
 
     async fn local(&self, build_info: &BuildInfo) -> bool {
         let folder_path = self.folder_path(build_info);
-        Runtime::exists(&folder_path).await
+        let executable_path = self
+            .kind
+            .executable(self.platform, build_info, &folder_path);
+        Runtime::exists(&executable_path).await
     }
 
     async fn download(&self, build_info: &BuildInfo) -> Result<()> {
@@ -64,7 +68,8 @@ impl BrowserFetcher {
         let folder_path = self.folder_path(build_info);
         let archive_path = folder_path.with_extension("zip");
 
-        Runtime::download(&url, &archive_path)
+        tracing::debug!(target: "chromiumoxide_fetcher::download", url = %url, archive_path = ?archive_path, "Downloading browser");
+        Runtime::download_file(&url, &archive_path)
             .await
             .map_err(FetcherError::DownloadFailed)?;
         Runtime::unzip(archive_path, folder_path)

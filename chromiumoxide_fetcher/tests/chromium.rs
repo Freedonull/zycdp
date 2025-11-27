@@ -2,6 +2,7 @@ use chromiumoxide_fetcher::{
     BrowserFetcherOptions, BrowserHost, BrowserKind, BrowserVersion, BuildInfo, Platform, Revision,
 };
 use reqwest::{IntoUrl, Response, StatusCode};
+use tokio::process::Command;
 
 pub async fn head<T: IntoUrl>(url: T) -> reqwest::Result<Response> {
     reqwest::Client::builder().build()?.head(url).send().await
@@ -22,7 +23,7 @@ async fn verify_chromium_revision_available() {
             .unwrap();
 
         if res.status() != StatusCode::OK {
-            panic!("Revision {} is not available for {:?}", revision, platform);
+            panic!("Revision {revision} is not available for {platform}");
         }
     }
 }
@@ -44,12 +45,12 @@ async fn find_chromium_revision_available() {
                 .unwrap();
 
             if res.status() != StatusCode::OK {
-                println!("Revision {} is not available for {:?}", revision, platform);
+                println!("Revision {revision} is not available for {platform}");
                 continue 'outer;
             }
         }
 
-        println!("Found revision {}", revision);
+        println!("Found revision {revision}");
         break;
     }
 }
@@ -59,7 +60,7 @@ async fn find_chromium_revision_available() {
 async fn download_chromium_revision() {
     let path = "./.cache";
 
-    tokio::fs::create_dir(path).await.unwrap();
+    tokio::fs::create_dir_all(path).await.unwrap();
 
     for platform in Platform::all() {
         let revision = chromiumoxide_fetcher::BrowserFetcher::new(
@@ -74,6 +75,37 @@ async fn download_chromium_revision() {
         .await
         .unwrap();
 
-        println!("Downloaded revision {} for {:?}", revision, platform);
+        println!("Downloaded revision {revision} for {platform}");
     }
+}
+
+#[tokio::test]
+async fn test_chromium() {
+    let path = "./.cache";
+
+    tokio::fs::create_dir_all(path).await.unwrap();
+
+    // Download the browser
+    let revision = chromiumoxide_fetcher::BrowserFetcher::new(
+        BrowserFetcherOptions::builder()
+            .with_kind(BrowserKind::Chromium)
+            .with_path(path)
+            .build()
+            .unwrap(),
+    )
+    .fetch()
+    .await
+    .unwrap();
+
+    println!(
+        "Launching browser from {}",
+        revision.executable_path.display()
+    );
+
+    // Launch the browser
+    let mut child = Command::new(&revision.executable_path)
+        .spawn()
+        .expect("Failed to start Chrome executable");
+    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+    child.kill().await.expect("Failed to kill Chrome process");
 }

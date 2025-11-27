@@ -110,3 +110,26 @@ impl TryFrom<String> for Channel {
         Self::from_str(&value)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_channel_resolve_chrome() {
+        let host = BrowserHost::current(BrowserKind::Chrome);
+        let build_info = Channel::Stable
+            .resolve(BrowserKind::Chrome, Platform::Linux, &host)
+            .await;
+        assert!(build_info.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_channel_resolve_chromium() {
+        let host = BrowserHost::current(BrowserKind::Chromium);
+        let build_info = Channel::Canary
+            .resolve(BrowserKind::Chromium, Platform::Linux, &host)
+            .await;
+        assert!(build_info.is_ok());
+    }
+}

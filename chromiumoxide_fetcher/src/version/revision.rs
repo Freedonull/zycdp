@@ -75,3 +75,26 @@ impl From<u32> for Revision {
         Self(value)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_revision_resolve_chrome() {
+        let host = BrowserHost::current(BrowserKind::Chrome);
+        let build_info = Revision::new(1121455)
+            .resolve(BrowserKind::Chrome, &host)
+            .await;
+        assert!(build_info.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_revision_resolve_chromium() {
+        let host = BrowserHost::current(BrowserKind::Chromium);
+        let build_info = Revision::new(1121455)
+            .resolve(BrowserKind::Chromium, &host)
+            .await;
+        assert!(build_info.is_ok());
+    }
+}

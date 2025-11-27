@@ -29,7 +29,7 @@ impl BrowserKind {
         match self {
             Self::Chromium => {
                 format!(
-                    "{host}/chromium-browser-snapshots/{folder}/{build_id}/chrome-{archive}.zip",
+                    "{host}/chromium-browser-snapshots/{folder}/{build_id}/{archive}.zip",
                     host = host.object,
                     folder = folder,
                     build_id = build_info.id,
@@ -37,7 +37,7 @@ impl BrowserKind {
             }
             Self::Chrome => {
                 format!(
-                    "{host}/chrome-for-testing/{build_id}/{folder}/chrome-{archive}.zip",
+                    "{host}/chrome-for-testing-public/{build_id}/{folder}/{archive}.zip",
                     host = host.object,
                     build_id = build_info.id,
                     folder = folder,
@@ -46,7 +46,7 @@ impl BrowserKind {
             }
             Self::ChromeHeadlessShell => {
                 format!(
-                    "{host}/chrome-for-testing/{build_id}/{folder}/chrome-headless-shell-{archive}.zip",
+                    "{host}/chrome-for-testing-public/{build_id}/{folder}/{archive}.zip",
                     host = host.object,
                     build_id = build_info.id,
                     folder = folder,
@@ -99,25 +99,32 @@ impl BrowserKind {
         match self {
             Self::Chromium => match platform {
                 Platform::Linux => "linux",
-                Platform::Mac | Platform::MacArm => "mac",
+                Platform::Mac | Platform::MacArm => "chrome-mac",
                 Platform::Win32 | Platform::Win64 => {
                     if let Some(revision) = revision {
                         if revision > CHROMIUM_REVISION_WIN32 {
-                            "win"
+                            "chrome-win"
                         } else {
-                            "win32"
+                            "chrome-win32"
                         }
                     } else {
-                        "win"
+                        "chrome-win"
                     }
                 }
             },
-            Self::Chrome | Self::ChromeHeadlessShell => match platform {
-                Platform::Linux => "linux64",
-                Platform::Mac => "mac-x64",
-                Platform::MacArm => "mac-arm64",
-                Platform::Win32 => "win32",
-                Platform::Win64 => "win64",
+            Self::Chrome => match platform {
+                Platform::Linux => "chrome-linux64",
+                Platform::Mac => "chrome-mac-x64",
+                Platform::MacArm => "chrome-mac-arm64",
+                Platform::Win32 => "chrome-win32",
+                Platform::Win64 => "chrome-win64",
+            },
+            Self::ChromeHeadlessShell => match platform {
+                Platform::Linux => "chrome-headless-shell-linux64",
+                Platform::Mac => "chrome-headless-shell-mac-x64",
+                Platform::MacArm => "chrome-headless-shell-mac-arm64",
+                Platform::Win32 => "chrome-headless-shell-win32",
+                Platform::Win64 => "chrome-headless-shell-win64",
             },
         }
     }

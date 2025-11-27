@@ -53,7 +53,7 @@ impl Runtime {
         Ok(body)
     }
 
-    pub async fn download(url: &str, archive_path: &Path) -> anyhow::Result<()> {
+    pub async fn download_file(url: &str, archive_path: &Path) -> anyhow::Result<()> {
         use async_std::io::WriteExt;
         use surf::http;
 

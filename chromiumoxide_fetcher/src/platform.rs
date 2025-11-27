@@ -1,6 +1,6 @@
-use std::path::{Path, PathBuf};
+use std::fmt;
 
-use crate::Revision;
+use crate::BuildInfo;
 
 /// List of platforms with pre-built chromium binaries
 #[derive(Clone, Copy, Debug)]
@@ -12,38 +12,35 @@ pub enum Platform {
     Win64,
 }
 
-impl Platform {
-    #[doc(hidden)] // internal API
-    pub fn download_url(&self, host: &str, revision: &Revision) -> String {
-        let archive = self.archive_name(revision);
-        let name = match self {
-            Self::Linux => "Linux_x64",
-            Self::Mac => "Mac",
-            Self::MacArm => "Mac_Arm",
-            Self::Win32 => "Win",
-            Self::Win64 => "Win_x64",
-        };
-        format!(
-            "{}/chromium-browser-snapshots/{}/{}/{}.zip",
-            host, name, revision, archive
+impl fmt::Display for Platform {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::Linux => "linux-x64",
+                Self::Mac => "macos-x64",
+                Self::MacArm => "macos-aarch64",
+                Self::Win32 => "windows-x86",
+                Self::Win64 => "windows-x64",
+            }
         )
     }
+}
 
-    pub(crate) fn archive_name(&self, revision: &Revision) -> String {
-        match self {
-            Self::Linux => "chrome-linux".to_string(),
-            Self::Mac | Self::MacArm => "chrome-mac".to_string(),
-            Self::Win32 | Self::Win64 => {
-                if revision.0 > 591_479 {
-                    "chrome-win".to_string()
-                } else {
-                    "chrome-win32".to_string()
-                }
-            }
-        }
+impl Platform {
+    /// List of all platforms.
+    pub fn all() -> &'static [Platform] {
+        &[
+            Self::Linux,
+            Self::Mac,
+            Self::MacArm,
+            Self::Win32,
+            Self::Win64,
+        ]
     }
 
-    pub(crate) fn folder_name(&self, revision: &Revision) -> String {
+    pub(crate) fn folder_name(&self, build_info: &BuildInfo) -> String {
         let platform = match self {
             Self::Linux => "linux",
             Self::Mac => "mac",
@@ -51,23 +48,7 @@ impl Platform {
             Self::Win32 => "win32",
             Self::Win64 => "win64",
         };
-        format!("{platform}-{revision}")
-    }
-
-    pub(crate) fn executable(&self, folder_path: &Path, revision: &Revision) -> PathBuf {
-        let mut path = folder_path.to_path_buf();
-        path.push(self.archive_name(revision));
-        match self {
-            Self::Linux => path.push("chrome"),
-            Self::Mac | Self::MacArm => {
-                path.push("Chromium.app");
-                path.push("Contents");
-                path.push("MacOS");
-                path.push("Chromium")
-            }
-            Self::Win32 | Self::Win64 => path.push("chrome.exe"),
-        }
-        path
+        format!("{platform}-{build_id}", build_id = build_info.id)
     }
 
     pub(crate) fn current() -> Option<Platform> {

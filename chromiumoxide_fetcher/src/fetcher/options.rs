@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use directories::BaseDirs;
 
 use crate::error::{FetcherError, Result};
-use crate::{BrowserHost, BrowserKind, BrowserVersion, Platform};
+use crate::{BrowserHost, BrowserKind, BrowserVersion, Platform, Revision};
 
 const CACHE_NAME: &str = "chromiumoxide";
 
@@ -56,6 +56,12 @@ pub struct BrowserFetcherOptionsBuilder {
 }
 
 impl BrowserFetcherOptionsBuilder {
+    #[deprecated(since = "0.8.0", note = "Use with_version instead")]
+    pub fn with_revision<T: Into<Revision>>(mut self, revision: T) -> Self {
+        self.version = Some(BrowserVersion::Revision(revision.into()));
+        self
+    }
+
     pub fn with_host<T: Into<BrowserHost>>(mut self, host: T) -> Self {
         self.host = Some(host.into());
         self

@@ -11,6 +11,16 @@ repository = "https://github.com/mattsse/chromiumoxide"
 readme = "../README.md"
 include = ["src/**/*", "LICENSE-*"]
 
+[lib]
+name = "chromiumoxide_fetcher"
+path = "src/lib.rs"
+doctest = false
+
+[[test]]
+name = "chromiumoxide_fetcher"
+path = "tests/lib.rs"
+harness = true
+
 [dev-dependencies]
 reqwest = { version = "0.12", features = [
   "rustls-tls",

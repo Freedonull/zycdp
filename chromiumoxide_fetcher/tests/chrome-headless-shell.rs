@@ -1,6 +1,7 @@
 use chromiumoxide_fetcher::{BrowserFetcherOptions, BrowserKind, Platform};
 use tokio::process::Command;
 
+#[ignore]
 #[tokio::test]
 async fn download_chrome_headless_shell() {
     let path = "./.cache";

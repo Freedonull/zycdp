@@ -3,17 +3,12 @@ use std::path::{Path, PathBuf};
 use crate::{BrowserHost, BuildInfo, Platform, Revision};
 
 /// The kind of browser to download.
-#[derive(Clone, Copy, Debug)]
+#[derive(Default, Clone, Copy, Debug)]
 pub enum BrowserKind {
+    #[default]
     Chromium,
     Chrome,
     ChromeHeadlessShell,
-}
-
-impl Default for BrowserKind {
-    fn default() -> Self {
-        Self::Chromium
-    }
 }
 
 impl BrowserKind {

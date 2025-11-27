@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Breaking Changes
+
+Due to the support of new browsers in the fetcher, we changed the API.
+The changes are mainly related to how you can request a specific version of the browser.
+Previously you could only request a chromium revision, now we support chrome versions, channel and milestone.
+
+```rust
+BrowserFetcherOptions::builder()
+  .with_kind(BrowserKind::Chrome)
+  .with_version(BrowserVersion::Channel(Channel::Beta))
+  .build()
+```
+
+We also change the output format of the `fetch`. It is now called a `BrowserFetcherInstallation`
+and contains a `BuildInfo`. We garantee that at least the version or revision will be present
+in that struct, but not always both.
+
+```rust
+let installation = chromiumoxide_fetcher::BrowserFetcher::new(options).fetch().await?;
+println!("Executable path: {}", installation.executable_path.display());
+```
+
 ### Changed
 
 - Bumped MSRV to 1.85 to support edition 2024
@@ -15,6 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Replace `winreg` by `windows-registry`
 - Updated PDL to r1519099 (Chromium 142.0.7431.0)
 - Updated fetcher to r1520176 (Chromium 142.0.7435.0)
+- Fetch now supports `Chrome for testing` and `Chrome Headless Shell`
 
 ### Added
 

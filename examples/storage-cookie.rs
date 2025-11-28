@@ -1,8 +1,7 @@
-use futures::StreamExt;
-
 use chromiumoxide::browser::Browser;
 use chromiumoxide::browser::BrowserConfig;
 use chromiumoxide::cdp::browser_protocol::network::CookieParam;
+use futures::StreamExt;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -10,7 +9,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let (mut browser, mut handler) =
         Browser::launch(BrowserConfig::builder().with_head().build()?).await?;
-    let _ = tokio::spawn(async move { while let Some(_) = handler.next().await {} });
+    let handle = tokio::spawn(async move {
+        while let Some(h) = handler.next().await {
+            match h {
+                Ok(_) => continue,
+                Err(_) => break,
+            }
+        }
+    });
 
     let _ = browser.new_page("https://setcookie.net/").await?;
     let example_cookie = CookieParam::builder()
@@ -43,6 +49,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     browser.close().await?;
     browser.wait().await?;
+    handle.await?;
 
     Ok(())
 }

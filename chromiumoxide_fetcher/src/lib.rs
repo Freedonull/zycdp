@@ -10,7 +10,7 @@
 //! ```no_run
 //! use chromiumoxide_fetcher::{BrowserFetcher, BrowserFetcherOptions};
 //!
-//! #[async_std::main]
+//! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn std::error::Error>> {
 //!     let fetcher = BrowserFetcher::new(BrowserFetcherOptions::default()?);
 //!     let revision_info = fetcher.fetch().await?;

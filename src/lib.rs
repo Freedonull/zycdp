@@ -8,13 +8,12 @@
 //! use futures::StreamExt;
 //! use chromiumoxide::{Browser, BrowserConfig};
 //!
-//! #[async_std::main]
+//! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn std::error::Error>> {
-//!
 //!     let (browser, mut handler) =
 //!         Browser::launch(BrowserConfig::builder().with_head().build()?).await?;
 //!
-//!     let handle = async_std::task::spawn(async move {
+//!     let handle = tokio::spawn(async move {
 //!         loop {
 //!             let _event = handler.next().await.unwrap();
 //!         }
@@ -35,7 +34,7 @@
 //!
 //!     let html = page.wait_for_navigation().await?.content().await?;
 //!
-//!     handle.await;
+//!     handle.await?;
 //!     Ok(())
 //! }
 //! ```

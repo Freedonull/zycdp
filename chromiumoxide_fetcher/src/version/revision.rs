@@ -56,9 +56,14 @@ impl FromStr for Revision {
     type Err = VersionError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        s.parse::<u32>()
-            .map(Self)
-            .map_err(|_| VersionError::InvalidRevision(s.to_string()))
+        let revision = s
+            .parse::<u32>()
+            .map_err(|_| VersionError::InvalidRevision(s.to_string()))?;
+        if revision < 1000000 {
+            // This most likely not a revision but a milestone.
+            return Err(VersionError::InvalidRevision(s.to_string()));
+        }
+        Ok(Revision(revision))
     }
 }
 

@@ -1,15 +1,13 @@
+use chromiumoxide::browser::{Browser, BrowserConfig};
 use futures::StreamExt;
 
-use chromiumoxide::browser::{Browser, BrowserConfig};
-
-#[tokio::main]
+#[async_std::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
 
-    let (browser, mut handler) =
-        Browser::launch(BrowserConfig::builder().with_head().build()?).await?;
+    let (browser, mut handler) = Browser::launch(BrowserConfig::builder().build()?).await?;
 
-    let handle = tokio::task::spawn(async move {
+    let handle = async_std::task::spawn(async move {
         loop {
             let _ = handler.next().await.unwrap();
         }
@@ -21,13 +19,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?
         .click()
         .await?
-        .type_str("Rust programming language")
+        .type_str("Rust (programming language)")
         .await?
         .press_key("Enter")
         .await?;
 
     let _html = page.wait_for_navigation().await?.content().await?;
 
-    handle.await?;
+    handle.await;
     Ok(())
 }

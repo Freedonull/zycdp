@@ -1,16 +1,15 @@
-use futures::StreamExt;
-
 use chromiumoxide::browser::{Browser, BrowserConfig};
 use chromiumoxide::page::ScreenshotParams;
 use chromiumoxide_cdp::cdp::browser_protocol::page::CaptureScreenshotFormat;
+use futures::StreamExt;
 
-#[async_std::main]
+#[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
 
     let (browser, mut handler) = Browser::launch(BrowserConfig::builder().build()?).await?;
 
-    let handle = async_std::task::spawn(async move {
+    let handle = tokio::spawn(async move {
         loop {
             let _ = handler.next().await.unwrap();
         }
@@ -35,6 +34,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .save_screenshot(CaptureScreenshotFormat::Png, "top-post.png")
         .await?;
 
-    handle.await;
+    handle.await?;
     Ok(())
 }

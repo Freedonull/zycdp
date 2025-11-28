@@ -1,7 +1,8 @@
+use std::sync::Arc;
+
 use chromiumoxide::browser::{Browser, BrowserConfig};
 use chromiumoxide_cdp::cdp::js_protocol::runtime::{AddBindingParams, EventBindingCalled};
 use futures::StreamExt;
-use std::sync::Arc;
 use tokio::sync::Mutex;
 
 #[tokio::main]
@@ -11,7 +12,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (mut browser, mut handler) =
         Browser::launch(BrowserConfig::builder().with_head().build()?).await?;
 
-    let handle = async_std::task::spawn(async move {
+    let handle = tokio::spawn(async move {
         while let Some(h) = handler.next().await {
             match h {
                 Ok(_) => continue,
@@ -44,7 +45,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert_eq!(*value, "30");
 
     browser.close().await?;
-    handle.await;
+    handle.await?;
 
     Ok(())
 }

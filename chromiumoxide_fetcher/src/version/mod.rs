@@ -86,6 +86,10 @@ impl FromStr for BrowserVersion {
             return Ok(Self::Version(build));
         }
 
+        if let Ok(milestone) = s.parse::<Milestone>() {
+            return Ok(Self::Milestone(milestone));
+        }
+
         Err(VersionError::InvalidVersion(s.to_string()))
     }
 }
@@ -98,20 +102,26 @@ impl TryFrom<String> for BrowserVersion {
     }
 }
 
-impl From<Revision> for BrowserVersion {
-    fn from(revision: Revision) -> Self {
-        Self::Revision(revision)
-    }
-}
-
 impl From<Channel> for BrowserVersion {
     fn from(channel: Channel) -> Self {
         Self::Channel(channel)
     }
 }
 
+impl From<Revision> for BrowserVersion {
+    fn from(revision: Revision) -> Self {
+        Self::Revision(revision)
+    }
+}
+
 impl From<Version> for BrowserVersion {
     fn from(build: Version) -> Self {
         Self::Version(build)
+    }
+}
+
+impl From<Milestone> for BrowserVersion {
+    fn from(milestone: Milestone) -> Self {
+        Self::Milestone(milestone)
     }
 }

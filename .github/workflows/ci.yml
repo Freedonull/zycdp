@@ -62,3 +62,19 @@ jobs:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - run: RUST_TEST_THREADS=1 cargo test -p chromiumoxide_fetcher
+
+  check-examples:
+    name: Check Examples
+    needs: [fmt, clippy, msrv]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Check examples with default features
+        run: cargo check --examples --features tokio-runtime,bytes
+      - name: Check async-std examples
+        run: cargo check --examples --features async-std-runtime
+      - name: Check fetcher examples
+        run: |
+          cargo check --example fetcher --features _fetcher-native-tokio
+          cargo check --example fetcher-async-std --features async-std-runtime,_fetcher-native-async-std

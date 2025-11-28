@@ -1,8 +1,8 @@
+use std::time::Duration;
+
 use chromiumoxide::browser::BrowserConfigBuilder;
 use chromiumoxide::Browser;
 use futures::StreamExt;
-use std::time::Duration;
-use tokio::task;
 
 #[tokio::main]
 async fn main() {
@@ -16,7 +16,7 @@ async fn main() {
     .await
     .unwrap();
 
-    let h = task::spawn(async move {
+    let h = tokio::spawn(async move {
         while let Some(h) = handler.next().await {
             h.unwrap();
         }

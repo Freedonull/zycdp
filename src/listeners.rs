@@ -217,7 +217,7 @@ mod tests {
 
     use super::*;
 
-    #[async_std::test]
+    #[tokio::test]
     async fn event_stream() {
         let (mut tx, rx) = futures::channel::mpsc::unbounded();
         let mut stream = EventStream::<EventAnimationCanceled>::new(rx);
@@ -231,7 +231,7 @@ mod tests {
         assert_eq!(&*next, &event);
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn custom_event_stream() {
         use serde::Deserialize;
 
@@ -259,7 +259,7 @@ mod tests {
         assert_eq!(&*next, &event);
     }
 
-    #[async_std::test]
+    #[tokio::test]
     async fn event_listeners() {
         let (tx, rx) = futures::channel::mpsc::unbounded();
         let mut listeners = EventListeners::default();
@@ -278,9 +278,9 @@ mod tests {
 
         let mut stream = EventStream::<EventAnimationCanceled>::new(rx);
 
-        async_std::task::spawn(async move {
+        tokio::spawn(async move {
             loop {
-                async_std::future::poll_fn(|cx| {
+                std::future::poll_fn(|cx| {
                     listeners.poll(cx);
                     Poll::Pending
                 })

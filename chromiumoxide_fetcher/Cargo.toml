@@ -45,7 +45,7 @@ surf = { version = "2.3", default-features = false, optional = true }
 windows-version = "0.1"
 
 [features]
-default = ["_native-async-std"]
+default = ["_native-tokio"]
 async-std-runtime = ["async-std", "surf"]
 tokio-runtime = ["tokio", "reqwest"]
 

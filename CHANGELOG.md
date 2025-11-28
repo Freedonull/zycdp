@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] 2025-11-28
+
 ### Breaking Changes
 
 Due to the support of new browsers in the fetcher, we changed the API.

@@ -24,6 +24,6 @@ jobs:
         id: auth
 
       - name: Publish crates
-        uses: katyo/publish-crates@02cc2f1ad653fb25c7d1ff9eb590a8a50d06186b # v2
+        uses: katyo/publish-crates@5e67639f17e8a1f221e804c2bd47f7a253e45dac # v2
         with:
           registry-token: ${{ steps.auth.outputs.token }}

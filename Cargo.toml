@@ -82,11 +82,11 @@ required-features = ["async-std-runtime"]
 
 [[example]]
 name = "fetcher-async-std"
-required-features = ["_fetcher-native-async-std"]
+required-features = ["async-std-runtime", "_fetcher-native-async-std"]
 
 [[example]]
 name = "fetcher"
-required-features = ["tokio-runtime", "_fetcher-native-tokio"]
+required-features = ["_fetcher-native-tokio"]
 
 [workspace]
 members = [

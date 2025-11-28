@@ -2,9 +2,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
-use async_std::task::sleep;
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
+use chromiumoxide::browser::{Browser, BrowserConfig};
 use chromiumoxide::cdp::browser_protocol::fetch::{
     self, ContinueRequestParams, EventRequestPaused, FailRequestParams, FulfillRequestParams,
 };
@@ -13,13 +13,12 @@ use chromiumoxide::cdp::browser_protocol::network::{
 };
 use chromiumoxide::Page;
 use futures::{select, StreamExt};
-
-use chromiumoxide::browser::{Browser, BrowserConfig};
+use tokio::time::sleep;
 
 const CONTENT: &str = "<html><head><meta http-equiv=\"refresh\" content=\"0;URL='http://www.example.com/'\" /></head><body><h1>TEST</h1></body></html>";
 const TARGET: &str = "http://google.com/";
 
-#[async_std::main]
+#[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
 
@@ -33,7 +32,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     )
     .await?;
 
-    let browser_handle = async_std::task::spawn(async move {
+    let browser_handle = tokio::spawn(async move {
         while let Some(h) = handler.next().await {
             if h.is_err() {
                 break;
@@ -55,7 +54,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap()
         .fuse();
     let intercept_page = page.clone();
-    let intercept_handle = async_std::task::spawn(async move {
+    let intercept_handle = tokio::spawn(async move {
         let mut resolutions: HashMap<network::RequestId, InterceptResolution> = HashMap::new();
         loop {
             select! {
@@ -106,8 +105,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Content: {:?}", content);
 
     browser.close().await?;
-    browser_handle.await;
-    intercept_handle.await;
+    browser_handle.await?;
+    intercept_handle.await?;
     Ok(())
 }
 

@@ -29,6 +29,9 @@ let installation = chromiumoxide_fetcher::BrowserFetcher::new(options).fetch().a
 println!("Executable path: {}", installation.executable_path.display());
 ```
 
+Finally, we switched the async runtime tokio by default. We will remove for support for async-std in the next release.
+If you want to part of the discussion on other runtime support, see [#273](https://github.com/mattsse/chromiumoxide/issues/273).
+
 ### Changed
 
 - Bumped MSRV to 1.85 to support edition 2024
@@ -38,6 +41,7 @@ println!("Executable path: {}", installation.executable_path.display());
 - Updated PDL to r1519099 (Chromium 142.0.7431.0)
 - Updated fetcher to r1520176 (Chromium 142.0.7435.0)
 - Fetch now supports `Chrome for testing` and `Chrome Headless Shell`
+- Now uses tokio by default
 
 ### Added
 

@@ -1,8 +1,7 @@
-use futures::StreamExt;
-use futures::TryFutureExt;
-
 use chromiumoxide::browser::{Browser, BrowserConfig};
 use chromiumoxide::cdp::browser_protocol::page::NavigateParams;
+use futures::StreamExt;
+use futures::TryFutureExt;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -11,7 +10,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (browser, mut handler) =
         Browser::launch(BrowserConfig::builder().with_head().build()?).await?;
 
-    let handle = tokio::task::spawn(async move {
+    let handle = tokio::spawn(async move {
         loop {
             let _ = handler.next().await.unwrap();
         }

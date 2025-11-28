@@ -2,17 +2,16 @@ use std::sync::Arc;
 
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
+use chromiumoxide::browser::{Browser, BrowserConfig};
 use chromiumoxide::cdp::browser_protocol::fetch::{
     ContinueRequestParams, EventRequestPaused, FulfillRequestParams,
 };
 use futures::StreamExt;
 
-use chromiumoxide::browser::{Browser, BrowserConfig};
-
 const CONTENT: &str = "<html><head></head><body><h1>TEST</h1></body></html>";
 const TARGET: &str = "https://news.ycombinator.com/";
 
-#[async_std::main]
+#[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
 
@@ -25,7 +24,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     )
     .await?;
 
-    let browser_handle = async_std::task::spawn(async move {
+    let browser_handle = tokio::spawn(async move {
         while let Some(h) = handler.next().await {
             if h.is_err() {
                 break;
@@ -38,7 +37,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut request_paused = page.event_listener::<EventRequestPaused>().await.unwrap();
     let intercept_page = page.clone();
-    let intercept_handle = async_std::task::spawn(async move {
+    let intercept_handle = tokio::spawn(async move {
         while let Some(event) = request_paused.next().await {
             if event.request.url == TARGET {
                 if let Err(e) = intercept_page
@@ -80,7 +79,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     browser.close().await?;
-    browser_handle.await;
-    intercept_handle.await;
+    browser_handle.await?;
+    intercept_handle.await?;
     Ok(())
 }

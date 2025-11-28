@@ -1,15 +1,14 @@
+use chromiumoxide::browser::{Browser, BrowserConfig};
 use futures::StreamExt;
 
-use chromiumoxide::browser::{Browser, BrowserConfig};
-
-#[async_std::main]
+#[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
 
     let (mut browser, mut handler) =
         Browser::launch(BrowserConfig::builder().with_head().build()?).await?;
 
-    let handle = async_std::task::spawn(async move {
+    let handle = tokio::spawn(async move {
         loop {
             let _ = handler.next().await.unwrap();
         }
@@ -22,6 +21,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .new_page("https://en.wikipedia.org")
         .await?;
 
-    handle.await;
+    handle.await?;
     Ok(())
 }

@@ -16,7 +16,7 @@ async fn main() {
             .await
             .expect("failed to launch browser");
 
-    let handle = tokio::task::spawn(async move {
+    let handle = tokio::spawn(async move {
         while let Some(event) = handler.next().await {
             tracing::debug!(event = ?event);
         }

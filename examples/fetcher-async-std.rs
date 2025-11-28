@@ -1,15 +1,14 @@
 use std::path::Path;
 
-use futures::StreamExt;
-
 use chromiumoxide::browser::{Browser, BrowserConfig};
 use chromiumoxide::fetcher::{BrowserFetcher, BrowserFetcherOptions};
+use futures::StreamExt;
 
-#[tokio::main]
+#[async_std::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Fetcher browser
     let download_path = Path::new("./download");
-    tokio::fs::create_dir_all(&download_path).await?;
+    async_std::fs::create_dir_all(&download_path).await?;
     let fetcher = BrowserFetcher::new(
         BrowserFetcherOptions::builder()
             .with_path(&download_path)
@@ -25,16 +24,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     )
     .await?;
 
-    let handle = tokio::task::spawn(async move {
+    let handle = async_std::task::spawn(async move {
         loop {
             match handler.next().await {
                 Some(h) => match h {
                     Ok(_) => continue,
-                    Err(_) => break,
+                    Err(e) => {
+                        println!("Err: {}", e);
+                        break;
+                    }
                 },
-                None => break,
+                None => {
+                    println!("None");
+                    break;
+                }
             }
         }
+        println!("Done");
     });
 
     let page = browser.new_page("about:blank").await?;
@@ -44,6 +50,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("it worked!");
 
     browser.close().await?;
-    handle.await?;
+    browser.wait().await?;
+    handle.await;
     Ok(())
 }

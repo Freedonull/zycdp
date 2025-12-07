@@ -27,10 +27,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .await?;
 
     // Navigate to a page
-    page.goto("https://www.wikipedia.org").await?;
-    page.wait_for_navigation().await?;
-
-    page.find_element("h1").await?;
+    page.goto("https://www.wikipedia.org")
+        .await?
+        .find_element("h1")
+        .await?;
 
     let _html = page.wait_for_navigation().await?.content().await?;
 

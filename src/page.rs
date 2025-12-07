@@ -1146,13 +1146,41 @@ impl Page {
         self.inner.frame_secondary_execution_context(frame_id).await
     }
 
-    /// Evaluates given script in every frame upon creation (before loading
-    /// frame's scripts)
+    /// Evaluates given script in every frame upon creation (before loading frame's scripts).
+    ///
+    /// This is equivalent to Playwright's `addInitScript()` or Puppeteer's `evaluateOnNewDocument()`.
+    /// Useful for modifying the JavaScript environment before page scripts run, such as:
+    /// - Hiding automation detection properties
+    /// - Injecting polyfills
+    /// - Setting up global variables
+    ///
+    /// # Example
+    /// ```
+    /// # use chromiumoxide::page::Page;
+    /// # async fn example(page: Page) -> Result<(), Box<dyn std::error::Error>> {
+    /// // Hide webdriver property for stealth scraping
+    /// page.evaluate_on_new_document(r#"
+    ///     Object.defineProperty(navigator, 'webdriver', {
+    ///         get: () => undefined
+    ///     });
+    /// "#).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
     pub async fn evaluate_on_new_document(
         &self,
         script: impl Into<AddScriptToEvaluateOnNewDocumentParams>,
     ) -> Result<ScriptIdentifier> {
         Ok(self.execute(script.into()).await?.result.identifier)
+    }
+
+    /// Alias for `evaluate_on_new_document` - familiar to Playwright users.
+    #[inline]
+    pub async fn add_init_script(
+        &self,
+        script: impl Into<AddScriptToEvaluateOnNewDocumentParams>,
+    ) -> Result<ScriptIdentifier> {
+        self.evaluate_on_new_document(script).await
     }
 
     /// Set the content of the frame.

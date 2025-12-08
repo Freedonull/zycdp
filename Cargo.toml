@@ -2,6 +2,7 @@
 name = "chromiumoxide"
 version = "0.8.0"
 rust-version = "1.85"
+autotests = false
 authors = ["Matthias Seitz <matthias.seitz@outlook.de>"]
 edition = "2021"
 license = "MIT OR Apache-2.0"
@@ -87,6 +88,11 @@ required-features = ["async-std-runtime", "_fetcher-native-async-std"]
 [[example]]
 name = "fetcher"
 required-features = ["_fetcher-native-tokio"]
+
+[[test]]
+name = "chromiumoxide_tests"
+path = "tests/lib.rs"
+harness = true
 
 [workspace]
 members = [

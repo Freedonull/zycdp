@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Add `add_init_script` to `Page` for scripts before navigation
+
 ## [0.8.0] 2025-11-28
 
 ### Breaking Changes

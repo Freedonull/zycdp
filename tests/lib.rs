@@ -4,6 +4,7 @@ use chromiumoxide::{Browser, BrowserConfig};
 use futures::{FutureExt, StreamExt};
 
 mod basic;
+mod config;
 mod page;
 
 pub async fn test<T>(test: T)

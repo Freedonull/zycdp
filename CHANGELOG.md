@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Use a struct `Arg` for arguments to combine flags automatically
+
 ### Added
 
 - Add `add_init_script` to `Page` for scripts before navigation

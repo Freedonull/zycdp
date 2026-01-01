@@ -1,12 +1,14 @@
 [package]
 name = "chaser-oxide"
 version = "0.1.0"
-rust-version = "1.85"
+rust-version = "1.75"
 autotests = false
 edition = "2021"
 license = "MIT OR Apache-2.0"
 readme = "README.md"
 description = "Undetectable browser automation library"
+authors = ["ccheshirecat"]
+repository = "https://github.com/ccheshirecat/chaser-oxide"
 keywords = ["chrome", "chromedriver", "puppeteer", "automation", "stealth"]
 categories = ["web-programming", "api-bindings", "development-tools::testing"]
 

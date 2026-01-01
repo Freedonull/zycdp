@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   publish:
-    if: github.repository == 'mattsse/chromiumoxide'
+    if: github.repository == 'ccheshirecat/chaser-oxide'
     runs-on: ubuntu-latest
 
     strategy:
@@ -25,11 +25,11 @@ jobs:
             path: chromiumoxide_cdp
           - name: chromiumoxide_fetcher
             path: chromiumoxide_fetcher
-          - name: chromiumoxide
+          - name: chaser-oxide
             path: .
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable

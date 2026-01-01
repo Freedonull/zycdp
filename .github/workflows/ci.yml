@@ -11,7 +11,7 @@ jobs:
     name: Check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo check
 
@@ -20,7 +20,7 @@ jobs:
     needs: check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
@@ -31,7 +31,7 @@ jobs:
     needs: check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
@@ -42,8 +42,8 @@ jobs:
     needs: check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@1.85.0
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.75.0
       - run: cargo check --lib
 
   test:
@@ -54,7 +54,7 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo test --lib
 
@@ -63,7 +63,7 @@ jobs:
     needs: [fmt, clippy, msrv]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - run: RUST_TEST_THREADS=1 cargo test --test '*'
 
@@ -72,7 +72,7 @@ jobs:
     needs: [fmt, clippy, msrv]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - run: RUST_TEST_THREADS=1 cargo test -p chromiumoxide_fetcher
 
@@ -81,7 +81,7 @@ jobs:
     needs: [fmt, clippy, msrv]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - name: Check examples with default features
         run: cargo check --examples --features tokio-runtime,bytes

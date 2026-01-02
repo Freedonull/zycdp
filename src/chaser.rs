@@ -24,32 +24,95 @@ pub struct Point {
     pub y: f64,
 }
 
-/// A wrapper around `Page` that provides **absolute stealth** execution and human-like input simulation.
+/// Stealth browser page with human-like input simulation.
 ///
-/// `ChaserPage` offers:
-/// - **Zero-footprint JavaScript execution** via `Page.createIsolatedWorld` (never touches Runtime domain)
-/// - Bezier curve mouse movements with jitter and overshoot
-/// - Realistic keyboard input with randomized delays
+/// # Stealth JavaScript Execution
 ///
-/// This implementation matches the Rebrowser "Protocol Hijack" method exactly.
+/// ```rust
+/// // Safe - uses isolated world, no Runtime.enable leak
+/// let title = chaser.evaluate("document.title").await?;
+///
+/// // Dangerous - only use raw_page().evaluate() if you know what you're doing
+/// let val = chaser.raw_page().evaluate("...").await?;  // Triggers Runtime.enable!
+/// ```
+///
+/// All other `raw_page()` methods (get_cookies, screenshot, goto, etc.) are safe.
+///
+/// # Features
+///
+/// - Zero-footprint JS execution via `Page.createIsolatedWorld`
+/// - Bezier curve mouse movements with jitter
+/// - Realistic typing with variable delays
 #[derive(Clone, Debug)]
 pub struct ChaserPage {
-    inner: Page,
+    page: Page,
     mouse_pos: Arc<Mutex<Point>>,
 }
 
 impl ChaserPage {
     /// Create a new ChaserPage wrapping the given Page.
-    pub fn new(inner: Page) -> Self {
+    pub fn new(page: Page) -> Self {
         Self {
-            inner,
+            page,
             mouse_pos: Arc::new(Mutex::new(Point { x: 0.0, y: 0.0 })),
         }
     }
 
-    /// Access the underlying Page for standard operations.
+    // ========== SAFE PAGE ACCESS ==========
+
+    /// Access the underlying Page.
+    ///
+    /// Most methods are safe, **except `raw_page().evaluate()`** which
+    /// triggers `Runtime.enable` detection. Use `chaser.evaluate()` instead.
+    #[doc(alias = "inner")]
+    pub fn raw_page(&self) -> &Page {
+        &self.page
+    }
+
+    /// Deprecated: Use `raw_page()` instead.
+    ///
+    /// This method is kept for backwards compatibility but will be removed in a future version.
+    #[deprecated(since = "0.1.1", note = "Use `raw_page()` instead for clarity")]
     pub fn inner(&self) -> &Page {
-        &self.inner
+        &self.page
+    }
+
+    // ========== STEALTH-SAFE PAGE OPERATIONS ==========
+
+    /// Navigate to a URL (stealth-safe).
+    ///
+    /// This is equivalent to `raw_page().goto()` but provided for convenience.
+    pub async fn goto(&self, url: &str) -> Result<()> {
+        self.page.goto(url).await.map_err(|e| anyhow!("{}", e))?;
+        Ok(())
+    }
+
+    /// Get the page HTML content (stealth-safe).
+    pub async fn content(&self) -> Result<String> {
+        self.page.content().await.map_err(|e| anyhow!("{}", e))
+    }
+
+    /// Get the current page URL (stealth-safe).
+    pub async fn url(&self) -> Result<Option<String>> {
+        self.page.url().await.map_err(|e| anyhow!("{}", e))
+    }
+
+    /// Execute JavaScript using **stealth execution** (no Runtime.enable leak).
+    ///
+    /// This is the safe way to run JavaScript on protected sites.
+    /// Under the hood, it uses `Page.createIsolatedWorld` to avoid detection.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// // Get page title
+    /// let title: String = chaser.evaluate("document.title").await?;
+    ///
+    /// // Check a value
+    /// let ua: String = chaser.evaluate("navigator.userAgent").await?;
+    /// ```
+    pub async fn evaluate(&self, script: &str) -> Result<Option<Value>> {
+        self.evaluate_stealth(script).await
     }
 
     /// Apply a ChaserProfile to this page in one clean call.
@@ -70,13 +133,13 @@ impl ChaserPage {
     /// ```
     pub async fn apply_profile(&self, profile: &ChaserProfile) -> Result<()> {
         // 1. Set the HTTP User-Agent header
-        self.inner
+        self.page
             .set_user_agent(&profile.user_agent())
             .await
             .map_err(|e| anyhow!("{}", e))?;
 
         // 2. Inject the bootstrap script to run on every new document
-        self.inner
+        self.page
             .execute(AddScriptToEvaluateOnNewDocumentParams {
                 source: profile.bootstrap_script(),
                 world_name: None,
@@ -116,7 +179,7 @@ impl ChaserPage {
             pattern_builder = pattern_builder.resource_type(rt);
         }
 
-        self.inner
+        self.page
             .execute(
                 FetchEnableParams::builder()
                     .handle_auth_requests(false)
@@ -131,7 +194,7 @@ impl ChaserPage {
 
     /// Disable request interception.
     pub async fn disable_request_interception(&self) -> Result<()> {
-        self.inner
+        self.page
             .execute(FetchDisableParams::default())
             .await
             .map_err(|e| anyhow!("{}", e))?;
@@ -173,7 +236,7 @@ impl ChaserPage {
 
         let body_base64 = STANDARD.encode(html);
 
-        self.inner
+        self.page
             .execute(
                 FulfillRequestParams::builder()
                     .request_id(RequestId::from(request_id.into()))
@@ -198,7 +261,7 @@ impl ChaserPage {
     pub async fn continue_request(&self, request_id: impl Into<String>) -> Result<()> {
         use chromiumoxide_cdp::cdp::browser_protocol::fetch::RequestId;
 
-        self.inner
+        self.page
             .execute(
                 ContinueRequestParams::builder()
                     .request_id(RequestId::from(request_id.into()))
@@ -223,7 +286,7 @@ impl ChaserPage {
     pub async fn evaluate_stealth(&self, script: &str) -> Result<Option<Value>> {
         // Get the main frame ID
         let frame_id = self
-            .inner
+            .page
             .mainframe()
             .await
             .map_err(|e| anyhow!("{}", e))?
@@ -232,7 +295,7 @@ impl ChaserPage {
         // Create an isolated world - Chrome returns the Context ID in the response!
         // This is the key insight: we get a context ID without touching Runtime domain
         let isolated_world = self
-            .inner
+            .page
             .execute(
                 CreateIsolatedWorldParams::builder()
                     .frame_id(frame_id)
@@ -256,7 +319,7 @@ impl ChaserPage {
             .unwrap();
 
         let res = self
-            .inner
+            .page
             .execute(params)
             .await
             .map_err(|e| anyhow!("{}", e))?;
@@ -287,7 +350,7 @@ impl ChaserPage {
         let path = BezierPath::generate(start, target_with_jitter, 25);
 
         for point in path {
-            self.inner
+            self.page
                 .move_mouse(crate::layout::Point {
                     x: point.x,
                     y: point.y,
@@ -305,7 +368,7 @@ impl ChaserPage {
     /// Perform a click at the current mouse position.
     pub async fn click(&self) -> Result<()> {
         let pos = { *self.mouse_pos.lock().unwrap() };
-        self.inner
+        self.page
             .click(crate::layout::Point { x: pos.x, y: pos.y })
             .await
             .map_err(|e| anyhow!("{}", e))?;
@@ -367,7 +430,7 @@ impl ChaserPage {
                 .build()
                 .unwrap();
 
-            self.inner
+            self.page
                 .execute(key_down)
                 .await
                 .map_err(|e| anyhow!("{}", e))?;
@@ -378,7 +441,7 @@ impl ChaserPage {
                 .build()
                 .unwrap();
 
-            self.inner
+            self.page
                 .execute(key_up)
                 .await
                 .map_err(|e| anyhow!("{}", e))?;
@@ -422,7 +485,7 @@ impl ChaserPage {
             .build()
             .unwrap();
 
-        self.inner
+        self.page
             .execute(key_down)
             .await
             .map_err(|e| anyhow!("{}", e))?;
@@ -434,7 +497,7 @@ impl ChaserPage {
             .build()
             .unwrap();
 
-        self.inner
+        self.page
             .execute(key_up)
             .await
             .map_err(|e| anyhow!("{}", e))?;
@@ -506,7 +569,7 @@ impl ChaserPage {
                 .build()
                 .unwrap();
 
-            self.inner
+            self.page
                 .execute(scroll)
                 .await
                 .map_err(|e| anyhow!("{}", e))?;
@@ -567,7 +630,7 @@ impl ChaserPage {
             .build()
             .unwrap();
 
-        self.inner
+        self.page
             .execute(key_down)
             .await
             .map_err(|e| anyhow!("{}", e))?;
@@ -577,7 +640,7 @@ impl ChaserPage {
             .build()
             .unwrap();
 
-        self.inner
+        self.page
             .execute(key_up)
             .await
             .map_err(|e| anyhow!("{}", e))?;

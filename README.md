@@ -57,9 +57,12 @@ async fn main() -> anyhow::Result<()> {
     chaser.apply_profile(&profile).await?;
 
     // 5. Navigate to target
-    chaser.inner().goto("https://example.com").await?;
+    chaser.goto("https://example.com").await?;
 
-    // 6. Use human-like interaction methods
+    // 6. Execute JS safely (stealth - no Runtime.enable leak)
+    let title: Option<String> = chaser.evaluate("document.title").await?;
+
+    // 7. Use human-like interaction methods
     chaser.move_mouse_human(400.0, 300.0).await?;
     chaser.click_human(500.0, 400.0).await?;
     chaser.type_text("Search query").await?;
@@ -116,8 +119,14 @@ pub enum Gpu {
 
 ```rust
 impl ChaserPage {
-    // Profile & Stealth
+    // Profile
     async fn apply_profile(&self, profile: &ChaserProfile) -> Result<()>;
+    
+    // Safe Page Operations
+    async fn goto(&self, url: &str) -> Result<()>;
+    async fn content(&self) -> Result<String>;
+    async fn url(&self) -> Result<Option<String>>;
+    async fn evaluate(&self, script: &str) -> Result<Option<Value>>;  // Stealth!
     
     // Human-like Mouse Movement (Bezier curves)
     async fn move_mouse_human(&self, x: f64, y: f64) -> Result<()>;
@@ -128,18 +137,14 @@ impl ChaserPage {
     async fn type_text(&self, text: &str) -> Result<()>;
     async fn type_text_with_typos(&self, text: &str) -> Result<()>;
     
-    // Stealth Script Execution
-    async fn evaluate_stealth<T>(&self, expression: &str) -> Result<T>;
-    
     // Request Interception
     async fn enable_request_interception(&self, pattern: &str, resource_type: Option<ResourceType>) -> Result<()>;
     async fn disable_request_interception(&self) -> Result<()>;
     async fn fulfill_request_html(&self, request_id: RequestId, html: &str, status: u16) -> Result<()>;
     async fn continue_request(&self, request_id: RequestId) -> Result<()>;
-    async fn block_request(&self, request_id: RequestId) -> Result<()>;
     
-    // Access underlying Page
-    fn inner(&self) -> &Page;
+    // Access underlying Page (use raw_page().evaluate() with caution - triggers detection!)
+    fn raw_page(&self) -> &Page;
 }
 ```
 

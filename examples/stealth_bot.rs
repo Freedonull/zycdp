@@ -56,7 +56,7 @@ async fn main() -> Result<()> {
     chaser
         .inner()
         .save_screenshot(
-            chaser - oxide::page::ScreenshotParams::builder().build(),
+            chaser_oxide::page::ScreenshotParams::builder().build(),
             "stealth_test.png",
         )
         .await?;

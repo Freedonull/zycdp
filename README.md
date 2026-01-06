@@ -187,6 +187,26 @@ Anti-bot systems look for discrepancies between the reported User-Agent and the 
 * **Bezier Mouse Curves**: Mouse movements follow randomized Bezier paths with acceleration and deceleration profiles.
 * **Typing Physics**: Keypresses include variable inter-character delays and optional typo-correction simulation.
 
+### 4. JavaScript-Level Stealth
+
+The `ChaserProfile.bootstrap_script()` injects comprehensive stealth at page load:
+
+| Feature | What It Does |
+|---------|-------------|
+| CDP Marker Cleanup | Removes `cdc_`, `$cdc_`, `__webdriver`, `__selenium` markers |
+| `navigator.webdriver` | Set to `false` (not deleted) |
+| `navigator.platform` | Matches profile OS (e.g., "Win32") |
+| `navigator.hardwareConcurrency` | Profile-configurable CPU cores |
+| `navigator.deviceMemory` | Profile-configurable RAM |
+| WebGL Spoofing | Custom GPU vendor/renderer strings |
+| Client Hints | `navigator.userAgentData` with matching brands |
+| `window.chrome` | Complete runtime object with `connect()`, `sendMessage()` |
+| `chrome.csi()` | Chrome Speed Index mock |
+| `chrome.loadTimes()` | Deprecated API mock (still checked by some sites) |
+| `chrome.app` | Chrome app object mock |
+
+**Tested against**: Cloudflare Turnstile, bot.sannysoft.com, CreepJS
+
 ## Technical Comparison
 
 | Metric | chaser-oxide | Node.js Alternatives |

@@ -242,6 +242,13 @@ impl ChaserProfile {
                 // === chaser-oxide HARDWARE HARMONY ===
                 // Profile: {ua}
 
+                // 0. CDP Marker Cleanup (run once at startup)
+                for (const prop of Object.getOwnPropertyNames(window)) {{
+                    if (/^cdc_|^\$cdc_|^__webdriver|^__selenium|^__driver|^\$chrome_/.test(prop)) {{
+                        try {{ delete window[prop]; }} catch(e) {{}}
+                    }}
+                }}
+
                 // 1. Platform
                 Object.defineProperty(navigator, 'platform', {{
                     get: () => '{platform}',
@@ -298,11 +305,101 @@ impl ChaserProfile {
                     return canPlayType.apply(this, arguments);
                 }};
 
-                // 6. WebDriver
-                delete Object.getPrototypeOf(navigator).webdriver;
+                // 6. WebDriver (set to false instead of delete - more realistic)
+                Object.defineProperty(Object.getPrototypeOf(navigator), 'webdriver', {{
+                    get: () => false,
+                    configurable: true,
+                    enumerable: true
+                }});
 
-                // 7. Chrome Object
-                window.chrome = {{ runtime: {{}} }};
+                // 7. Chrome Object (enhanced with runtime APIs)
+                if (!window.chrome) {{
+                    window.chrome = {{}};
+                }}
+                if (!window.chrome.runtime) {{
+                    window.chrome.runtime = {{}};
+                }}
+                
+                // Chrome Runtime APIs (required by Turnstile)
+                if (!window.chrome.runtime.connect) {{
+                    window.chrome.runtime.connect = function() {{
+                        return {{
+                            name: '',
+                            sender: undefined,
+                            onDisconnect: {{ 
+                                addListener: function() {{}}, 
+                                removeListener: function() {{}},
+                                hasListener: function() {{ return false; }},
+                                hasListeners: function() {{ return false; }}
+                            }},
+                            onMessage: {{ 
+                                addListener: function() {{}}, 
+                                removeListener: function() {{}},
+                                hasListener: function() {{ return false; }},
+                                hasListeners: function() {{ return false; }}
+                            }},
+                            postMessage: function() {{}},
+                            disconnect: function() {{}}
+                        }};
+                    }};
+                }}
+                if (!window.chrome.runtime.sendMessage) {{
+                    window.chrome.runtime.sendMessage = function() {{ return; }};
+                }}
+
+                // Chrome CSI (Chrome Speed Index) - some sites check this
+                if (!window.chrome.csi) {{
+                    window.chrome.csi = function() {{
+                        const now = Date.now();
+                        return {{ 
+                            startE: now, 
+                            onloadT: now, 
+                            pageT: now, 
+                            tran: 15 
+                        }};
+                    }};
+                }}
+
+                // Chrome loadTimes (deprecated but still checked)
+                if (!window.chrome.loadTimes) {{
+                    window.chrome.loadTimes = function() {{
+                        const now = Date.now() / 1000;
+                        return {{
+                            requestTime: now,
+                            startLoadTime: now,
+                            commitLoadTime: now,
+                            finishDocumentLoadTime: now,
+                            finishLoadTime: now,
+                            firstPaintTime: now,
+                            firstPaintAfterLoadTime: 0,
+                            navigationType: "Other",
+                            wasFetchedViaSpdy: false,
+                            wasNpnNegotiated: false,
+                            npnNegotiatedProtocol: "",
+                            wasAlternateProtocolAvailable: false,
+                            connectionInfo: "http/1.1"
+                        }};
+                    }};
+                }}
+
+                // Chrome app object
+                if (!window.chrome.app) {{
+                    window.chrome.app = {{
+                        isInstalled: false,
+                        InstallState: {{ 
+                            DISABLED: 'disabled', 
+                            INSTALLED: 'installed', 
+                            NOT_INSTALLED: 'not_installed' 
+                        }},
+                        RunningState: {{ 
+                            CANNOT_RUN: 'cannot_run', 
+                            READY_TO_RUN: 'ready_to_run', 
+                            RUNNING: 'running' 
+                        }},
+                        getDetails: function() {{ return null; }},
+                        getIsInstalled: function() {{ return false; }}
+                    }};
+                }}
             }})();
         "#,
             ua = self.user_agent(),

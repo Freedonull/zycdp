@@ -3,3 +3,18 @@
 Cargo.lock
 .idea/
 .cache/
+
+# Letta AI
+.letta/
+*.af
+
+# Analysis docs (development only)
+STEALTH_ANALYSIS.md
+BROWSER_PATCH_RECOMMENDATIONS.md
+CHASER_CRITICAL_PATCHES.md
+IMPROVEMENTS_APPLIED.md
+BRANCH_STRATEGY.md
+
+# Test artifacts
+*.png
+test_winna.rs

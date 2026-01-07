@@ -32,9 +32,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // create a new browser page and navigate to the url
     let page = browser.new_page("https://en.wikipedia.org").await?;
 
+    // find and click the search toggle button to reveal the search bar
+    page.find_element(".search-toggle").await?.click().await?;
+
     // find the search bar type into the search field and hit `Enter`,
     // this triggers a new navigation to the search result page
-    page.find_element("input#searchInput")
+    page.find_element("input[name='search']")
         .await?
         .click()
         .await?
@@ -136,9 +139,9 @@ A: Check that your chromium language settings are set to English. `chromiumoxide
 Licensed under either of these:
 
 - Apache License, Version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or
-  https://www.apache.org/licenses/LICENSE-2.0)
+  <https://www.apache.org/licenses/LICENSE-2.0>)
 - MIT license ([LICENSE-MIT](LICENSE-MIT) or
-  https://opensource.org/licenses/MIT)
+  <https://opensource.org/licenses/MIT>)
 
 ## References
 

@@ -31,7 +31,7 @@ tokio = { version = "1", features = ["rt", "fs", "process", "macros"] }
 thiserror = "1"
 anyhow = "1"
 directories = "6"
-serde = "1"
+serde = { version = "1", features = ["derive"] }
 tracing = "0.1"
 zip = { version = "0.6", default-features = false, features = ["deflate"] }
 async-std = { version = "1.5", features = ["unstable"], optional = true }

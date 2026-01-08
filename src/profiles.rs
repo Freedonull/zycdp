@@ -249,22 +249,22 @@ impl ChaserProfile {
                     }}
                 }}
 
-                // 1. Platform
-                Object.defineProperty(navigator, 'platform', {{
+                // 1. Platform (on prototype to avoid getOwnPropertyNames detection)
+                Object.defineProperty(Navigator.prototype, 'platform', {{
                     get: () => '{platform}',
                     configurable: true
                 }});
 
-                // 2. Hardware
-                Object.defineProperty(navigator, 'hardwareConcurrency', {{
+                // 2. Hardware (on prototype)
+                Object.defineProperty(Navigator.prototype, 'hardwareConcurrency', {{
                     get: () => {cores},
                     configurable: true
                 }});
-                Object.defineProperty(navigator, 'deviceMemory', {{
+                Object.defineProperty(Navigator.prototype, 'deviceMemory', {{
                     get: () => {memory},
                     configurable: true
                 }});
-                Object.defineProperty(navigator, 'maxTouchPoints', {{
+                Object.defineProperty(Navigator.prototype, 'maxTouchPoints', {{
                     get: () => 0,
                     configurable: true
                 }});
@@ -283,8 +283,8 @@ impl ChaserProfile {
                     spoofWebGL(WebGL2RenderingContext.prototype);
                 }}
 
-                // 4. Client Hints
-                Object.defineProperty(navigator, 'userAgentData', {{
+                // 4. Client Hints (on prototype)
+                Object.defineProperty(Navigator.prototype, 'userAgentData', {{
                     get: () => ({{
                         brands: [
                             {{ brand: "Google Chrome", version: "{chrome_ver}" }},
@@ -293,7 +293,8 @@ impl ChaserProfile {
                         ],
                         mobile: false,
                         platform: "{hints_platform}"
-                    }})
+                    }}),
+                    configurable: true
                 }});
 
                 // 5. Video Codecs

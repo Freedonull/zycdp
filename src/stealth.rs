@@ -70,18 +70,18 @@ pub trait StealthProfile: Send + Sync {
             // === chaser-oxide HARDWARE HARMONY ===
             // Profile: {ua}
 
-            // 1. Platform alignment
-            Object.defineProperty(navigator, 'platform', {{
+            // 1. Platform alignment (on prototype to avoid getOwnPropertyNames detection)
+            Object.defineProperty(Navigator.prototype, 'platform', {{
                 get: () => '{platform}',
                 configurable: true
             }});
 
-            // 2. Hardware specs
-            Object.defineProperty(navigator, 'hardwareConcurrency', {{
+            // 2. Hardware specs (on prototype)
+            Object.defineProperty(Navigator.prototype, 'hardwareConcurrency', {{
                 get: () => {cores},
                 configurable: true
             }});
-            Object.defineProperty(navigator, 'deviceMemory', {{
+            Object.defineProperty(Navigator.prototype, 'deviceMemory', {{
                 get: () => {memory},
                 configurable: true
             }});
@@ -100,13 +100,14 @@ pub trait StealthProfile: Send + Sync {
                 spoofWebGL(WebGL2RenderingContext.prototype);
             }}
 
-            // 4. Client Hints
-            Object.defineProperty(navigator, 'userAgentData', {{
+            // 4. Client Hints (on prototype)
+            Object.defineProperty(Navigator.prototype, 'userAgentData', {{
                 get: () => ({{
                     brands: [{brands}],
                     mobile: false,
                     platform: "{hints_platform}"
-                }})
+                }}),
+                configurable: true
             }});
 
             // 5. Video codecs (H.264/AAC)
@@ -119,8 +120,11 @@ pub trait StealthProfile: Send + Sync {
                 return canPlayType.apply(this, arguments);
             }};
 
-            // 6. WebDriver removal
-            delete Object.getPrototypeOf(navigator).webdriver;
+            // 6. WebDriver - set to false (not delete, which makes it undefined)
+            Object.defineProperty(Object.getPrototypeOf(navigator), 'webdriver', {{
+                get: () => false,
+                configurable: true
+            }});
 
             // 7. window.chrome
             window.chrome = {{ runtime: {{}} }};

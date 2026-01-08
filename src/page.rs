@@ -75,7 +75,7 @@ impl Page {
     async fn hide_client_hints(&self) -> Result<(), CdpError> {
         self.execute(AddScriptToEvaluateOnNewDocumentParams {
             source: r#"
-                Object.defineProperty(navigator, 'userAgentData', {
+                Object.defineProperty(Navigator.prototype, 'userAgentData', {
                     get: () => ({
                         brands: [
                             { brand: "Google Chrome", version: "129" },
@@ -84,7 +84,8 @@ impl Page {
                         ],
                         mobile: false,
                         platform: "Windows"
-                    })
+                    }),
+                    configurable: true
                 });
             "#
             .to_string(),
@@ -114,18 +115,18 @@ impl Page {
     async fn hide_hardware_harmony(&self) -> Result<(), CdpError> {
         self.execute(AddScriptToEvaluateOnNewDocumentParams {
             source: r#"
-                // 1. Fix Platform - MUST match Windows User-Agent
-                Object.defineProperty(navigator, 'platform', { 
+                // 1. Fix Platform - MUST match Windows User-Agent (on prototype)
+                Object.defineProperty(Navigator.prototype, 'platform', { 
                     get: () => 'Win32',
                     configurable: true
                 });
 
-                // 2. Align Hardware specs for a "typical gamer PC" profile
-                Object.defineProperty(navigator, 'hardwareConcurrency', { 
+                // 2. Align Hardware specs for a "typical gamer PC" profile (on prototype)
+                Object.defineProperty(Navigator.prototype, 'hardwareConcurrency', { 
                     get: () => 8,
                     configurable: true 
                 });
-                Object.defineProperty(navigator, 'deviceMemory', { 
+                Object.defineProperty(Navigator.prototype, 'deviceMemory', { 
                     get: () => 8,
                     configurable: true
                 });
@@ -273,7 +274,7 @@ impl Page {
                     enumerable: false
                 });
                 
-                Object.defineProperty(navigator, 'plugins', {
+                Object.defineProperty(Navigator.prototype, 'plugins', {
                     get: () => fakePlugins,
                     configurable: true
                 });
@@ -306,11 +307,14 @@ impl Page {
         Ok(())
     }
 
-    /// Removes the `navigator.webdriver` property on frame creation
+    /// Sets `navigator.webdriver` to false on frame creation
     async fn hide_webdriver(&self) -> Result<(), CdpError> {
         self.execute(AddScriptToEvaluateOnNewDocumentParams {
             source: "
-                    delete Object.getPrototypeOf(navigator).webdriver;
+                    Object.defineProperty(Object.getPrototypeOf(navigator), 'webdriver', {
+                        get: () => false,
+                        configurable: true
+                    });
                 "
             .to_string(),
             world_name: None,

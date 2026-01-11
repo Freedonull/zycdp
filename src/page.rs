@@ -163,14 +163,14 @@ impl Page {
         Ok(())
     }
 
-    /// Removes the `navigator.webdriver` property on frame creation
+    /// Sets the `navigator.webdriver` property to `false` on frame creation
     async fn hide_webdriver(&self) -> Result<(), CdpError> {
         self.execute(AddScriptToEvaluateOnNewDocumentParams {
             source: "
                     Object.defineProperty(
-                        navigator,
+                        Object.getPrototypeOf(navigator), //Fixes 'Object.getOwnPropertyNames(navigator) should return empty array'
                         'webdriver',
-                        { get: () => undefined }
+                        { get: () => false } //Fixes 'property should not be undefined'
                     );
                 "
             .to_string(),
@@ -1160,8 +1160,8 @@ impl Page {
     /// # async fn example(page: Page) -> Result<(), Box<dyn std::error::Error>> {
     /// // Hide webdriver property for stealth scraping
     /// page.evaluate_on_new_document(r#"
-    ///     Object.defineProperty(navigator, 'webdriver', {
-    ///         get: () => undefined
+    ///     Object.defineProperty(Object.getPrototypeOf(navigator), 'webdriver', {
+    ///         get: () => false
     ///     });
     /// "#).await?;
     /// # Ok(())

@@ -328,6 +328,9 @@ impl BrowserConfigBuilder {
 
     pub fn hide(mut self) -> Self {
         self.hidden = true;
+        if self.hidden && self.viewport == Some(Viewport::default()) {
+            self.viewport = None;
+        }
         self
     }
 

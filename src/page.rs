@@ -122,17 +122,66 @@ impl Page {
     async fn hide_plugins(&self) -> Result<(), CdpError> {
         self.execute(AddScriptToEvaluateOnNewDocumentParams {
             source: "
-                    Object.defineProperty(
-                        navigator,
-                        'plugins',
-                        {
-                            get: () => [
-                                { filename: 'internal-pdf-viewer' },
-                                { filename: 'adsfkjlkjhalkh' },
-                                { filename: 'internal-nacl-plugin '}
-                            ],
+                // Create a proper PluginArray-like object (NOT an Array!)
+                // Key insight: PluginArray is array-like but Array.isArray() returns false
+                const makePlugin = (name, filename, description) => {
+                    const plugin = Object.create(Plugin.prototype);
+
+                    Object.defineProperties(plugin, {
+                        name: { value: name, enumerable: true },
+                        filename: { value: filename, enumerable: true },
+                        description: { value: description, enumerable: true },
+                        length: { value: 1, enumerable: true },
+                        0: { value: { type: 'application/pdf', suffixes: 'pdf', description }, enumerable: true }
+                    });
+                    return plugin;
+                };
+
+                // Create the fake PluginArray using the real PluginArray prototype
+                const fakePlugins = Object.create(PluginArray.prototype);
+                const plugins = [
+                    makePlugin('PDF Viewer', 'internal-pdf-viewer', 'Portable Document Format'),
+                    makePlugin('Chrome PDF Viewer', 'internal-pdf-viewer', 'Portable Document Format'),
+                    makePlugin('Chromium PDF Viewer', 'internal-pdf-viewer', 'Portable Document Format'),
+                    makePlugin('Microsoft Edge PDF Viewer', 'internal-pdf-viewer', 'Portable Document Format'),
+                    makePlugin('WebKit built-in PDF', 'internal-pdf-viewer', 'Portable Document Format')
+                ];
+                // Add indexed access and length
+                plugins.forEach((p, i) => {
+                    Object.defineProperty(fakePlugins, i, { value: p, enumerable: true });
+                });
+                Object.defineProperty(fakePlugins, 'length', { value: plugins.length, enumerable: true });
+                // Add methods
+                Object.defineProperty(fakePlugins, 'item', { 
+                    value: function(index) { return this[index] || null; },
+                    enumerable: false
+                });
+                Object.defineProperty(fakePlugins, 'namedItem', { 
+                    value: function(name) { 
+                        for (let i = 0; i < this.length; i++) {
+                            if (this[i].name === name) return this[i];
                         }
-                    );
+                        return null;
+                    },
+                    enumerable: false
+                });
+
+                Object.defineProperty(fakePlugins, 'refresh', { 
+                    value: function() {},
+                    enumerable: false
+                });
+                // Make it iterable
+                Object.defineProperty(fakePlugins, Symbol.iterator, {
+                    value: function* () {
+                        for (let i = 0; i < this.length; i++) yield this[i];
+                    },
+                    enumerable: false
+                });
+
+                Object.defineProperty(Object.getPrototypeOf(navigator), 'plugins', {
+                    get: () => fakePlugins,
+                    configurable: true
+                });
                 "
             .to_string(),
             world_name: None,

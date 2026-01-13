@@ -1,5 +1,9 @@
 # chaser-oxide
 
+[![Crates.io](https://img.shields.io/crates/v/chaser-oxide.svg)](https://crates.io/crates/chaser-oxide)
+[![Documentation](https://docs.rs/chaser-oxide/badge.svg)](https://docs.rs/chaser-oxide)
+[![License](https://img.shields.io/crates/l/chaser-oxide.svg)](https://github.com/ccheshirecat/chaser-oxide)
+
 **A Rust-based fork of `chromiumoxide` modified for hardened browser automation.**
 
 chaser-oxide is an experimental fork of the `chromiumoxide` library. It incorporates modifications to the core Chrome DevTools Protocol (CDP) client and high-level interaction utilities to reduce the footprint of automated browser sessions.
@@ -14,11 +18,15 @@ chaser-oxide is an experimental fork of the `chromiumoxide` library. It incorpor
 
 ## Installation
 
-Add to your `Cargo.toml`:
+```bash
+cargo add chaser-oxide tokio futures
+```
+
+Or add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-chaser-oxide = { git = "https://github.com/ccheshirecat/chaser-oxide" }
+chaser-oxide = "0.1"
 tokio = { version = "1", features = ["full"] }
 futures = "0.3"
 ```

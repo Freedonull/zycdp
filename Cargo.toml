@@ -1,6 +1,6 @@
 [package]
 name = "chaser-oxide"
-version = "0.1.0"
+version = "0.1.1"
 rust-version = "1.75"
 autotests = false
 edition = "2021"

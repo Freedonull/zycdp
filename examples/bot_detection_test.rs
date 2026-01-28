@@ -161,6 +161,8 @@ async fn main() -> Result<()> {
         }
     }
 
+    println!();
+
     // ========== TEST 5: Manual Stealth Checks ==========
     println!("📊 TEST 5: Manual Stealth Checks");
 
@@ -224,47 +226,47 @@ async fn main() -> Result<()> {
     println!("🎯 TEST SUMMARY");
     println!("================================");
 
-    // let webdriver_clean = webdriver == "false";
-    // let chrome_present = chrome_check == "true";
-    // let low_red_flags = red_count < 5;
-    // let no_cdp_markers = cdp_count == 0;
+    let webdriver_clean = webdriver == "false";
+    let chrome_present = chrome_check == "true";
+    let low_red_flags = red_count < 5;
+    let no_cdp_markers = cdp_count == 0;
 
-    // println!(
-    //     "✓ navigator.webdriver = false: {}",
-    //     if webdriver_clean { "✅" } else { "❌" }
-    // );
-    // println!(
-    //     "✓ window.chrome present: {}",
-    //     if chrome_present { "✅" } else { "❌" }
-    // );
-    // println!(
-    //     "✓ Low red flags (<5): {}",
-    //     if low_red_flags { "✅" } else { "❌" }
-    // );
-    // println!(
-    //     "✓ No CDP markers: {}",
-    //     if no_cdp_markers { "✅" } else { "❌" }
-    // );
+    println!(
+        "✓ navigator.webdriver = false: {}",
+        if webdriver_clean { "✅" } else { "❌" }
+    );
+    println!(
+        "✓ window.chrome present: {}",
+        if chrome_present { "✅" } else { "❌" }
+    );
+    println!(
+        "✓ Low red flags (<5): {}",
+        if low_red_flags { "✅" } else { "❌" }
+    );
+    println!(
+        "✓ No CDP markers: {}",
+        if no_cdp_markers { "✅" } else { "❌" }
+    );
 
-    // let score = [
-    //     webdriver_clean,
-    //     chrome_present,
-    //     low_red_flags,
-    //     no_cdp_markers,
-    // ]
-    // .iter()
-    // .filter(|&&x| x)
-    // .count();
+    let score = [
+        webdriver_clean,
+        chrome_present,
+        low_red_flags,
+        no_cdp_markers,
+    ]
+    .iter()
+    .filter(|&&x| x)
+    .count();
 
-    // println!("\nOverall Score: {}/4", score);
+    println!("\nOverall Score: {}/4", score);
 
-    // if score >= 3 {
-    //     println!("🎉 HEADLESS STEALTH: EXCELLENT");
-    // } else if score >= 2 {
-    //     println!("⚠️  HEADLESS STEALTH: GOOD");
-    // } else {
-    //     println!("❌ HEADLESS STEALTH: NEEDS IMPROVEMENT");
-    // }
+    if score >= 3 {
+        println!("🎉 HEADLESS STEALTH: EXCELLENT");
+    } else if score >= 2 {
+        println!("⚠️  HEADLESS STEALTH: GOOD");
+    } else {
+        println!("❌ HEADLESS STEALTH: NEEDS IMPROVEMENT");
+    }
 
     Ok(())
 }

@@ -236,7 +236,7 @@ impl ChaserProfile {
 
     /// Generate the complete JavaScript bootstrap script for this profile
     pub fn bootstrap_script(&self) -> String {
-        format!(
+        let mut script = format!(
             r#"
             (function() {{
                 // === chaser-oxide HARDWARE HARMONY ===
@@ -248,6 +248,21 @@ impl ChaserProfile {
                         try {{ delete window[prop]; }} catch(e) {{}}
                     }}
                 }}
+
+                // Prevent CDP detection via Error.prepareStackTrace
+                const OriginalError = Error;  
+                const originalPrepareStackTrace = Error.prepareStackTrace;    
+                let currentPrepareStackTrace = originalPrepareStackTrace;    
+                Object.defineProperty(Error, 'prepareStackTrace', {{    
+                    get() {{
+                        return currentPrepareStackTrace;   
+                    }},  
+                    set(fn) {{ 
+                        // do nothing to prevent detection of CDP
+                    }},    
+                    configurable: true,    
+                    enumerable: false  
+                }});
 
                 // 1. Platform (on prototype to avoid getOwnPropertyNames detection)
                 Object.defineProperty(Navigator.prototype, 'platform', {{
@@ -294,6 +309,22 @@ impl ChaserProfile {
                         mobile: false,
                         platform: "{hints_platform}"
                     }}),
+                    configurable: true
+                }});
+
+                Object.defineProperty(Navigator.prototype.userAgentData.__proto__, 'getHighEntropyValues', {{
+                    value: async function(hints) {{
+                        const values = {{}};
+                        for (const hint of hints) {{
+                            if (hint === 'platform') values.platform = "{platform}";
+                            else if (hint === 'platformVersion') values.platformVersion = "19.0.0";
+                            else if (hint === 'architecture') values.architecture = "x86";
+                            else if (hint === 'model') values.model = "";
+                            else if (hint === 'bitness') values.bitness = "64";
+                        }}
+                        return values;
+
+                    }},
                     configurable: true
                 }});
 
@@ -411,7 +442,53 @@ impl ChaserProfile {
             webgl_renderer = self.gpu.renderer(),
             chrome_ver = self.chrome_version,
             hints_platform = self.os.hints_platform(),
-        )
+        );
+
+        // Prevent CDP detection via worker threads
+        let worker_script = format!(
+            r#"
+                const OriginalWorker = Worker;
+                window.Worker = function (url, options) {{
+                
+                    const injectedCode = `{script}`
+                    const workerPromise = fetch(url)
+                        .then((res) => res.text())
+                        .then((code) => {{
+                            const blob = new Blob([injectedCode + code], {{
+                                type: "application/javascript",
+                            }});
+                            return new OriginalWorker(URL.createObjectURL(blob), options);
+                        }});
+
+                    
+                        let realWorker = null;
+                        const pendingMessages = [];
+                        workerPromise.then((w) => {{
+                            realWorker = w;
+                            pendingMessages.forEach((msg) => w.postMessage(msg));
+                        }});
+                        return {{
+                            postMessage(msg) {{
+                            if (realWorker) {{
+                                realWorker.postMessage(msg);
+                            }} else {{
+                                pendingMessages.push(msg);
+                            }}
+                        }},
+                            set onmessage(fn) {{
+                                workerPromise.then((w) => (w.onmessage = fn));
+                            }},
+                            terminate() {{
+                                workerPromise.then((w) => w.terminate());
+                            }},
+                        }};
+                }};
+            "#,
+            script = script
+        );
+
+        script.push_str(&worker_script);
+        script
     }
 }
 

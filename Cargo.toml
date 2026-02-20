@@ -1,6 +1,6 @@
 [package]
 name = "chromiumoxide"
-version = "0.8.0"
+version = "0.9.0"
 rust-version = "1.85"
 autotests = false
 authors = ["Matthias Seitz <matthias.seitz@outlook.de>"]
@@ -14,15 +14,15 @@ keywords = ["chrome", "chromedriver", "puppeteer", "automation"]
 categories = ["web-programming", "api-bindings", "development-tools::testing"]
 
 [dependencies]
-async-tungstenite = { version = "0.32.0", features = ["tokio-runtime"] }
+async-tungstenite = { version = "0.32", features = ["tokio-runtime"] }
 serde = { version = "1", features = ["derive"] }
 futures = "0.3"
-chromiumoxide_types = { path = "chromiumoxide_types", version = "0.8" }
-chromiumoxide_cdp = { path = "chromiumoxide_cdp", version = "0.8" }
-chromiumoxide_fetcher = { path = "chromiumoxide_fetcher", version = "0.8", default-features = false, optional = true }
+chromiumoxide_types = { path = "chromiumoxide_types", version = "0.9" }
+chromiumoxide_cdp = { path = "chromiumoxide_cdp", version = "0.9" }
+chromiumoxide_fetcher = { path = "chromiumoxide_fetcher", version = "0.9", default-features = false, optional = true }
 serde_json = "1"
 which = "8"
-thiserror = "1"
+thiserror = "2"
 url = "2"
 base64 = "0.22"
 fnv = "1"
@@ -39,10 +39,10 @@ tracing = "0.1"
 pin-project-lite = "0.2"
 dunce = "1"
 bytes = { version = "1", features = ["serde"], optional = true }
-reqwest = { version = "0.12", default-features = false }
+reqwest = { version = "0.13", default-features = false }
 
 [target.'cfg(windows)'.dependencies]
-windows-registry = "0.5"
+windows-registry = "0.6"
 
 [dev-dependencies]
 quote = "1"
@@ -55,14 +55,16 @@ tokio = { version = "1", features = ["rt-multi-thread", "time", "macros"] }
 default = ["bytes"]
 fetcher = ["chromiumoxide_fetcher"]
 bytes = ["dep:bytes"]
-serde0 = []
 
 rustls = ["chromiumoxide_fetcher/rustls"]
 native-tls = ["chromiumoxide_fetcher/native-tls"]
 
+zip0 = ["chromiumoxide_fetcher/zip0"]
+zip8 = ["chromiumoxide_fetcher/zip8"]
+
 [[example]]
 name = "fetcher"
-required-features = ["fetcher"]
+required-features = ["fetcher", "zip8", "rustls"]
 
 [[test]]
 name = "chromiumoxide_tests"

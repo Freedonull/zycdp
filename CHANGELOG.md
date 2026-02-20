@@ -18,6 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bump CDP to `r1566079`
 - Use a struct `Arg` for arguments to combine flags automatically
 - Browser process no longer inherits stdout
+- Update `reqwest` to v0.13
+- Update `thiserror` to v2
+- Update `heck` to v0.5
+- Add support for `zip` v8 and make it default
 
 ### Added
 

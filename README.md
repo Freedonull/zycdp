@@ -67,15 +67,7 @@ If you need something else, the `Page::execute` function allows for writing your
 
 ### Add chromiumoxide to your project
 
-`chromiumoxide` comes with support for the [`tokio`](https://github.com/tokio-rs/tokio) and [`async-std`](https://github.com/async-rs/async-std) runtimes.
-
-By default `chromiumoxide` is configured with `tokio`.
-
-To use `chromiumoxide` with the `async-std` runtime:
-
-```toml
-chromiumoxide = { version = "0.8.0", default-features = false, features = ["async-std-runtime"] }
-```
+`chromiumoxide` only supports the [`tokio`](https://github.com/tokio-rs/tokio) runtime.
 
 ## Generated Code
 
@@ -90,15 +82,9 @@ All Events are bundled in single enum (`CdpEvent`)
 ## Fetcher
 
 By default `chromiumoxide` will try to find an installed version of chromium on the computer it runs on.
-It is possible to download and install one automatically for some platforms using the `fetcher`.
+It is possible to download and install one automatically for some platforms using the `fetcher` feature.
 
-Ther features are currently a bit messy due to a Cargo bug and will be changed once it is resolved.
-Based on your runtime and TLS configuration you should enable one of the following:
-
-- `_fetcher-rustls-async-std`
-- `_fetcher-rustls-tokio`
-- `_fetcher-native-async-std`
-- `_fetcher-native-tokio`
+You need to enable either the `rustls` or the `native-tls` feature to allow the fetcher to download binaries.
 
 ```rust
 use std::path::Path;

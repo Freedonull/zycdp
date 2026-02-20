@@ -34,22 +34,14 @@ directories = "6"
 serde = { version = "1", features = ["derive"] }
 tracing = "0.1"
 zip = { version = "0.6", default-features = false, features = ["deflate"] }
-async-std = { version = "1.5", features = ["unstable"], optional = true }
-tokio = { version = "1", features = ["fs"], optional = true }
-reqwest = { version = "0.12", default-features = false, features = [
-  "json",
-], optional = true }
-surf = { version = "2.3", default-features = false, optional = true }
+tokio = { version = "1", features = ["fs", "io-util"] }
+reqwest = { version = "0.12", default-features = false, features = ["json"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-version = "0.1"
 
 [features]
-default = ["_native-tokio"]
-async-std-runtime = ["async-std", "surf"]
-tokio-runtime = ["tokio", "reqwest"]
+default = ["rustls"]
 
-_rustls-async-std = ["surf/h1-client-rustls", "async-std-runtime"]
-_rustls-tokio = ["reqwest/rustls-tls", "tokio-runtime"]
-_native-async-std = ["surf/h1-client", "async-std-runtime"]
-_native-tokio = ["reqwest/native-tls", "tokio-runtime"]
+rustls = ["reqwest/rustls-tls"]
+native-tls = ["reqwest/native-tls"]

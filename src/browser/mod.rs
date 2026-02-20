@@ -167,15 +167,8 @@ impl Browser {
             child: &mut Child,
         ) -> Result<(String, Connection<CdpEventMessage>)> {
             let dur = config.launch_timeout;
-            cfg_if::cfg_if! {
-                if #[cfg(feature = "async-std-runtime")] {
-                    let timeout_fut = Box::pin(async_std::task::sleep(dur));
-                } else if #[cfg(feature = "tokio-runtime")] {
-                    let timeout_fut = Box::pin(tokio::time::sleep(dur));
-                } else {
-                    panic!("missing chromiumoxide runtime: enable `async-std-runtime` or `tokio-runtime`")
-                }
-            };
+            let timeout_fut = Box::pin(tokio::time::sleep(dur));
+
             // extract the ws:
             let debug_ws_url = ws_url_from_output(child, timeout_fut).await?;
             let conn = Connection::<CdpEventMessage>::connect(&debug_ws_url).await?;
@@ -298,8 +291,8 @@ impl Browser {
     /// Get the spawned chromium instance
     ///
     /// The instance is spawned by [`Browser::launch`]. The result is a [`async_process::Child`]
-    /// value. It acts as a compat wrapper for an `async-std` or `tokio` child process.
-    ///
+    /// value.
+    ///A
     /// You may use [`async_process::Child::as_mut_inner`] to retrieve the concrete implementation
     /// for the selected runtime.
     ///

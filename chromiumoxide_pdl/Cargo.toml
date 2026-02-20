@@ -2,8 +2,8 @@
 name = "chromiumoxide_pdl"
 version = "0.8.0"
 authors = ["Matthias Seitz <matthias.seitz@outlook.de>"]
-edition = "2021"
-rust-version = "1.70"
+edition = "2024"
+rust-version = "1.85"
 license = "MIT OR Apache-2.0"
 description = "Contains a PDL parser and rust generator"
 homepage = "https://github.com/mattsse/chromiumoxide"

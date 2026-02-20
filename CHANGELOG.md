@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Browser process no longer inherits stdout
 - Update reqwest to 0.13
 - Update thiserror to 2
+- Add support for zip8 and make it default
 
 ### Added
 

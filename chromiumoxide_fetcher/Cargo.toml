@@ -31,7 +31,12 @@ anyhow = "1"
 directories = "6"
 serde = { version = "1", features = ["derive"] }
 tracing = "0.1"
-zip = { version = "0.6", default-features = false, features = ["deflate"] }
+zip-0_2 = { package = "zip", version = "0.6", default-features = false, features = [
+  "deflate",
+], optional = true }
+zip-8 = { package = "zip", version = "8", default-features = false, features = [
+  "deflate-flate2-zlib-rs",
+], optional = true }
 tokio = { version = "1", features = ["fs", "io-util"] }
 reqwest = { version = "0.13", default-features = false, features = ["json"] }
 
@@ -39,7 +44,7 @@ reqwest = { version = "0.13", default-features = false, features = ["json"] }
 windows-version = "0.1"
 
 [features]
-default = ["rustls"]
+default = ["rustls", "zip-8"]
 
 rustls = ["reqwest/rustls"]
 native-tls = ["reqwest/native-tls"]

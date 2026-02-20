@@ -84,4 +84,4 @@ jobs:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - name: Check examples
-        run: cargo check --examples --features fetcher
+        run: cargo check --examples --features fetcher,zip8,rustls

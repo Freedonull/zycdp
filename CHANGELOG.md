@@ -18,6 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bump CDP to `r1566079`
 - Use a struct `Arg` for arguments to combine flags automatically
 - Browser process no longer inherits stdout
+- Update reqwest to 0.13
+- Update thiserror to 2
 
 ### Added
 

@@ -1,6 +1,6 @@
-#[cfg(feature = "zip-0_2")]
-mod zip_0_2;
-#[cfg(feature = "zip-0_2")]
+#[cfg(feature = "zip-0_6")]
+mod zip_0_6;
+#[cfg(feature = "zip-0_6")]
 pub use zip_0_2::ZipArchive;
 
 #[cfg(feature = "zip-8")]

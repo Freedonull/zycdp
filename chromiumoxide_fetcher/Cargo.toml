@@ -31,7 +31,7 @@ anyhow = "1"
 directories = "6"
 serde = { version = "1", features = ["derive"] }
 tracing = "0.1"
-zip-0_2 = { package = "zip", version = "0.6", default-features = false, features = [
+zip-0_6 = { package = "zip", version = "0.6", default-features = false, features = [
   "deflate",
 ], optional = true }
 zip-8 = { package = "zip", version = "8", default-features = false, features = [

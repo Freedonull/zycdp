@@ -59,10 +59,12 @@ bytes = ["dep:bytes"]
 rustls = ["chromiumoxide_fetcher/rustls"]
 native-tls = ["chromiumoxide_fetcher/native-tls"]
 
+zip0 = ["chromiumoxide_fetcher/zip0"]
+zip8 = ["chromiumoxide_fetcher/zip8"]
 
 [[example]]
 name = "fetcher"
-required-features = ["fetcher"]
+required-features = ["fetcher", "zip8", "rustls"]
 
 [[test]]
 name = "chromiumoxide_tests"

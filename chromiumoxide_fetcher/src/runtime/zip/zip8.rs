@@ -3,16 +3,16 @@ use std::io::{self, Read, Seek};
 use std::ops::{Deref, DerefMut};
 use std::path::Path;
 
-use zip_8::{
+use zip8::{
     read::ZipFile,
     result::{ZipError, ZipResult},
 };
 
 #[derive(Clone, Debug)]
-pub struct ZipArchive<R: Read + Seek>(zip_8::ZipArchive<R>);
+pub struct ZipArchive<R: Read + Seek>(zip8::ZipArchive<R>);
 
 impl<R: Read + Seek> Deref for ZipArchive<R> {
-    type Target = zip_8::ZipArchive<R>;
+    type Target = zip8::ZipArchive<R>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -27,7 +27,7 @@ impl<R: Read + Seek> DerefMut for ZipArchive<R> {
 
 impl<R: Read + Seek> ZipArchive<R> {
     pub fn new(reader: R) -> ZipResult<Self> {
-        zip_8::ZipArchive::new(reader).map(Self)
+        zip8::ZipArchive::new(reader).map(Self)
     }
 
     /// We need this custom extract function to support symlinks.

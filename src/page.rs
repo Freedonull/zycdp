@@ -507,7 +507,7 @@ impl Page {
     /// immediately loaded when `click()` resolves. To wait until navigation is
     /// finished an additional `wait_for_navigation()` is required:
     ///
-    /// # Example
+    /// # Examples
     ///
     /// Trigger a navigation and wait until the triggered navigation is finished
     ///
@@ -521,9 +521,28 @@ impl Page {
     /// # }
     /// ```
     ///
-    /// # Example
     ///
-    /// Perform custom click
+    /// Use [`click_with()`] to perform a custom click:
+    ///
+    /// ```no_run
+    /// # use chromiumoxide::page::Page;
+    /// # use chromiumoxide::error::Result;
+    /// # use chromiumoxide::layout::Point;
+    /// # use chromiumoxide::types::ClickOptions;
+    /// # async fn demo(page: Page, point: Point) -> Result<()> {
+    ///     let options = ClickOptions::builder()
+    ///         .click_count(2)
+    ///         .build();
+    ///
+    ///     page.click_with(point, options).await?;
+    ///     # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// ## Advanced
+    ///
+    /// For advanced use cases, the same behavior can be achieved manually by
+    /// issuing `DispatchMouseEventParams` commands directly via the CDP API.
     ///
     /// ```no_run
     /// # use chromiumoxide::page::Page;
@@ -558,6 +577,46 @@ impl Page {
     /// ```
     pub async fn click(&self, point: Point) -> Result<&Self> {
         self.inner.click(point).await?;
+        Ok(self)
+    }
+
+    /// Performs a mouse click event at the point's location using the provided
+    /// [`ClickOptions`].
+    ///
+    /// This behaves the same as [`click()`], but allows customizing click behavior
+    /// such as click count or other click-related options.
+    ///
+    /// The point is scrolled into view first, then the corresponding
+    /// `DispatchMouseEventParams` commands are issued according to the supplied
+    /// options.
+    ///
+    /// Bear in mind that if `click_with()` triggers a navigation, the new page is
+    /// not immediately loaded when this function resolves. To wait until navigation
+    /// is finished, an additional [`wait_for_navigation()`] is required.
+    ///
+    /// # Example
+    ///
+    /// Perform a double click using [`ClickOptions`]
+    ///
+    /// ```no_run
+    /// # use chromiumoxide::page::Page;
+    /// # use chromiumoxide::error::Result;
+    /// # use chromiumoxide::layout::Point;
+    /// # use chromiumoxide::types::ClickOptions;
+    /// # async fn demo(page: Page, point: Point) -> Result<()> {
+    ///     let options = ClickOptions::builder()
+    ///         .click_count(2)
+    ///         .build();
+    ///
+    ///     page.click_with(point, options)
+    ///         .await?
+    ///         .wait_for_navigation()
+    ///         .await?;
+    ///     # Ok(())
+    /// # }
+    /// ```
+    pub async fn click_with(&self, point: Point, options: ClickOptions) -> Result<&Self> {
+        self.inner.click_with(point, options).await?;
         Ok(self)
     }
 

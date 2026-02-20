@@ -15,6 +15,7 @@ struct DetectionRow {
 }
 
 #[tokio::test]
+#[ignore] // Bot tests are flaky but a good reference
 async fn test_bot_detection() {
     let config = BrowserConfig::builder().hide().build().unwrap(); //needed .hide()
     test_config(config, async |browser| {

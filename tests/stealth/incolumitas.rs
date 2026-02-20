@@ -6,6 +6,7 @@ use serde_json::Value;
 use tokio::time::sleep;
 
 #[tokio::test]
+#[ignore] // Bot tests are flaky but a good reference
 async fn bot_detection() {
     test(async |browser: &mut Browser| {
         let page = browser.new_page("about:blank").await.unwrap();

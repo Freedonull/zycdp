@@ -8,8 +8,8 @@ use std::{
 use super::argument::{Arg, ArgConst, ArgsBuilder};
 use crate::async_process::{self, Child, Stdio};
 use crate::detection::{self, DetectionOptions};
-use crate::handler::viewport::Viewport;
 use crate::handler::REQUEST_TIMEOUT;
+use crate::handler::viewport::Viewport;
 
 /// Default `Browser::launch` timeout in MS
 pub const LAUNCH_TIMEOUT: u64 = 20_000;

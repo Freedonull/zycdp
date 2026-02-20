@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use futures::channel::mpsc::{channel, Receiver, Sender};
+use futures::channel::mpsc::{Receiver, Sender, channel};
 use futures::channel::oneshot::channel as oneshot_channel;
 use futures::stream::Fuse;
 use futures::{SinkExt, StreamExt};
@@ -27,7 +27,7 @@ use chromiumoxide_cdp::cdp::js_protocol::runtime::{
 };
 use chromiumoxide_types::{Command, CommandResponse};
 
-use crate::cmd::{to_command_response, CommandMessage};
+use crate::cmd::{CommandMessage, to_command_response};
 use crate::error::{CdpError, Result};
 use crate::handler::commandfuture::CommandFuture;
 use crate::handler::domworld::DOMWorldKind;
@@ -37,7 +37,7 @@ use crate::handler::target_message_future::TargetMessageFuture;
 use crate::js::EvaluationResult;
 use crate::layout::Point;
 use crate::page::ScreenshotParams;
-use crate::{keys, utils, ArcHttpRequest};
+use crate::{ArcHttpRequest, keys, utils};
 
 #[derive(Debug)]
 pub struct PageHandle {

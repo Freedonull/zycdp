@@ -20,10 +20,10 @@ use chromiumoxide_cdp::cdp::{
 use chromiumoxide_types::{Method, MethodId, Request};
 
 use crate::error::DeadlineExceeded;
+use crate::handler::REQUEST_TIMEOUT;
 use crate::handler::domworld::DOMWorld;
 use crate::handler::http::HttpRequest;
-use crate::handler::REQUEST_TIMEOUT;
-use crate::{cmd::CommandChain, ArcHttpRequest};
+use crate::{ArcHttpRequest, cmd::CommandChain};
 
 pub const UTILITY_WORLD_NAME: &str = "__chromiumoxide_utility_world__";
 const EVALUATION_SCRIPT_URL: &str = "____chromiumoxide_utility_world___evaluation_script__";

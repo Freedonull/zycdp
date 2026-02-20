@@ -1,7 +1,7 @@
 use std::time::Duration;
 
-use chromiumoxide::browser::BrowserConfigBuilder;
 use chromiumoxide::Browser;
+use chromiumoxide::browser::BrowserConfigBuilder;
 use futures::StreamExt;
 
 #[tokio::main]

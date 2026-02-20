@@ -1,4 +1,4 @@
-use crate::{test_config, BrowserConfig};
+use crate::{BrowserConfig, test_config};
 
 #[tokio::test]
 #[ignore] // For some reason, this test fails on CI but works locally

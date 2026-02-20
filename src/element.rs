@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use chromiumoxide_types::ClickOptions;
-use futures::{future, Future, FutureExt, Stream};
+use futures::{Future, FutureExt, Stream, future};
 
 use chromiumoxide_cdp::cdp::browser_protocol::dom::{
     BackendNodeId, DescribeNodeParams, GetBoxModelParams, GetContentQuadsParams, Node, NodeId,

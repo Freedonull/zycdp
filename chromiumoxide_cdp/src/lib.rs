@@ -12,6 +12,7 @@ use crate::revision::Revision;
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[allow(unreachable_patterns)]
 #[allow(deprecated)]
+#[rustfmt::skip]
 pub mod cdp;
 pub mod revision;
 

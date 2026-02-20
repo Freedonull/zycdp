@@ -4,7 +4,7 @@ use std::pin::Pin;
 use std::task::ready;
 
 use async_tungstenite::tungstenite::Message as WsMessage;
-use async_tungstenite::{tungstenite::protocol::WebSocketConfig, WebSocketStream};
+use async_tungstenite::{WebSocketStream, tungstenite::protocol::WebSocketConfig};
 use futures::stream::Stream;
 use futures::task::{Context, Poll};
 use futures::{SinkExt, StreamExt};

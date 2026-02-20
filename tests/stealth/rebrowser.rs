@@ -10,13 +10,12 @@ use crate::test_config;
 struct DetectionRow {
     #[serde(rename = "type")]
     kind: String,
-
     rating: f64,
     note: String,
 }
 
 #[tokio::test]
-async fn bot_detection() {
+async fn test_bot_detection() {
     let config = BrowserConfig::builder().hide().build().unwrap(); //needed .hide()
     test_config(config, async |browser| {
         let page = browser.new_page("about:blank").await.unwrap();
@@ -27,7 +26,6 @@ async fn bot_detection() {
             .unwrap();
         test_dummyfn(&page).await;
         test_sourceurlleak(&page).await;
-        //skip mainWorldExecution, because i'm noob
         test_runtimeenableleak(&page).await;
         test_exposefnleak(&page).await;
         test_navigator_webdriver(&page).await;
@@ -51,12 +49,14 @@ async fn test_viewport(page: &Page) {
     assert!(result.rating < 0.0, "{}", result.note)
 }
 
-async fn test_navigator_webdriver(page: &Page) { //Can easliy be broken (because extensions may override)
+// Can easily be broken (because extensions may override)
+async fn test_navigator_webdriver(page: &Page) {
     let result = get_result(page, "navigatorWebdriver").await.unwrap();
     assert!(result.rating < 0.0, "{}", result.note)
 }
 
-async fn test_exposefnleak(page: &Page) { //Has issue, can be skipped
+// Has issue, can be skipped
+async fn test_exposefnleak(page: &Page) {
     page.expose_function("exposedFn", "() => { console.log('exposedFn call') }")
         .await
         .unwrap();
@@ -82,19 +82,22 @@ async fn test_dummyfn(page: &Page) {
     assert!(result.rating < 0.0, "{}", result.note)
 }
 
-async fn get_result(page: &Page, target_kind: &str) -> Option<DetectionRow> { //maybe doesnt needed that much effort
+async fn get_result(page: &Page, target_kind: &str) -> Option<DetectionRow> {
     let timeout_secs = 15;
     let interval = Duration::from_millis(500);
     let mut elapsed = Duration::from_secs(0);
 
     loop {
         let script = "document.querySelector('#detections-json') ? document.querySelector('#detections-json').value : ''";
-        if let Ok(Some(js_value)) = page.evaluate(script).await.map(|v| v.into_value::<String>().ok()) {
-            
+        if let Ok(Some(js_value)) = page
+            .evaluate(script)
+            .await
+            .map(|v| v.into_value::<String>().ok())
+        {
             if !js_value.trim().is_empty() && js_value.starts_with('[') {
                 if let Ok(list) = serde_json::from_str::<Vec<DetectionRow>>(&js_value) {
                     if let Some(found) = list.into_iter().find(|p| p.kind == target_kind) {
-                            return Some(found);
+                        return Some(found);
                     }
                 }
             }

@@ -13,39 +13,39 @@ async fn bot_detection() {
 
         page.goto("https://bot.incolumitas.com").await.unwrap();
 
-        sleep(Duration::from_secs(1)).await; //Wait 1 second to finish the tests
+        sleep(Duration::from_secs(1)).await; // Wait 1 second to finish the tests
 
         let new_test_raw = page
-        .find_element("#new-tests")
-        .await
-        .unwrap()
-        .inner_text()
-        .await
-        .unwrap()
-        .unwrap_or_else(|| "{}".to_string());
+            .find_element("#new-tests")
+            .await
+            .unwrap()
+            .inner_text()
+            .await
+            .unwrap()
+            .unwrap_or_else(|| "{}".to_string());
 
         let new_test_json: Value = serde_json::from_str(&new_test_raw).unwrap();
 
         let old_test_raw = page
-        .find_element("#detection-tests")
-        .await
-        .unwrap()
-        .inner_text()
-        .await
-        .unwrap()
-        .unwrap_or_else(|| "{}".to_string());
+            .find_element("#detection-tests")
+            .await
+            .unwrap()
+            .inner_text()
+            .await
+            .unwrap()
+            .unwrap_or_else(|| "{}".to_string());
         let old_test_json: Value = serde_json::from_str(&old_test_raw).unwrap();
 
         let new_failed: Vec<String> = new_test_json
-        .as_object()
-        .unwrap()
-        .iter()
-        .filter_map(|(k, v)| if v == "FAIL" { Some(k.clone()) } else { None })
-        .collect();
+            .as_object()
+            .unwrap()
+            .iter()
+            .filter_map(|(k, v)| if v == "FAIL" { Some(k.clone()) } else { None })
+            .collect();
         assert!(
             new_failed.is_empty(),
-                "New test FAIL: {}",
-                new_failed.join(", ")
+            "New test FAIL: {}",
+            new_failed.join(", ")
         );
 
         let mut old_failed = Vec::new();
@@ -61,8 +61,8 @@ async fn bot_detection() {
         }
         assert!(
             old_failed.is_empty(),
-                "Old test FAIL: {}",
-                old_failed.join(", ")
+            "Old test FAIL: {}",
+            old_failed.join(", ")
         );
     })
     .await;

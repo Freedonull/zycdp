@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use futures::channel::mpsc::unbounded;
 use futures::channel::oneshot::channel as oneshot_channel;
-use futures::{stream, SinkExt, StreamExt};
+use futures::{SinkExt, StreamExt, stream};
 
 use chromiumoxide_cdp::cdp::browser_protocol::dom::*;
 use chromiumoxide_cdp::cdp::browser_protocol::emulation::{
@@ -23,21 +23,21 @@ use chromiumoxide_cdp::cdp::js_protocol::runtime::{
     AddBindingParams, CallArgument, CallFunctionOnParams, EvaluateParams, ExecutionContextId,
     RemoteObjectType, ScriptId,
 };
-use chromiumoxide_cdp::cdp::{browser_protocol, IntoEventKind};
+use chromiumoxide_cdp::cdp::{IntoEventKind, browser_protocol};
 use chromiumoxide_types::*;
 
 use crate::auth::Credentials;
 use crate::element::Element;
 use crate::error::{CdpError, Result};
+use crate::handler::PageInner;
 use crate::handler::commandfuture::CommandFuture;
 use crate::handler::domworld::DOMWorldKind;
 use crate::handler::httpfuture::HttpFuture;
 use crate::handler::target::{GetName, GetParent, GetUrl, TargetMessage};
-use crate::handler::PageInner;
 use crate::js::{Evaluation, EvaluationResult};
 use crate::layout::Point;
 use crate::listeners::{EventListenerRequest, EventStream};
-use crate::{utils, ArcHttpRequest};
+use crate::{ArcHttpRequest, utils};
 
 #[derive(Debug, Clone)]
 pub struct Page {
@@ -1145,13 +1145,9 @@ impl Page {
                 if expr.context_id.is_none() {
                     expr.context_id = self.execution_context().await?;
                 }
-                let fallback = expr.eval_as_function_fallback.and_then(|p| {
-                    if p {
-                        Some(expr.clone())
-                    } else {
-                        None
-                    }
-                });
+                let fallback = expr
+                    .eval_as_function_fallback
+                    .and_then(|p| if p { Some(expr.clone()) } else { None });
                 let res = self.evaluate_expression(expr).await?;
 
                 if res.object().r#type == RemoteObjectType::Function {

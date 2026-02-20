@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use chromiumoxide::{cdp::js_protocol::runtime::EventConsoleApiCalled, BrowserConfig};
+use chromiumoxide::{BrowserConfig, cdp::js_protocol::runtime::EventConsoleApiCalled};
 use futures::StreamExt;
 
 const TARGET: &str = "https://www.microsoft.com/";

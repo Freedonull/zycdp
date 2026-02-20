@@ -1,10 +1,10 @@
 use std::future::Future;
 use std::io;
 
-use futures::channel::mpsc::{channel, unbounded, Sender};
+use futures::SinkExt;
+use futures::channel::mpsc::{Sender, channel, unbounded};
 use futures::channel::oneshot::channel as oneshot_channel;
 use futures::select;
-use futures::SinkExt;
 
 use chromiumoxide_cdp::cdp::browser_protocol::browser::{
     BrowserContextId, CloseReturns, GetVersionParams, GetVersionReturns,
@@ -22,7 +22,7 @@ use chromiumoxide_types::*;
 
 pub use self::config::{BrowserConfig, BrowserConfigBuilder, LAUNCH_TIMEOUT};
 use crate::async_process::{Child, ExitStatus};
-use crate::cmd::{to_command_response, CommandMessage};
+use crate::cmd::{CommandMessage, to_command_response};
 use crate::conn::Connection;
 use crate::error::{BrowserStderr, CdpError, Result};
 use crate::handler::browser::BrowserContext;
@@ -521,7 +521,9 @@ impl Drop for Browser {
                 // so it won't leave any resources locked. It is, however, a better practice for the user to
                 // do it himself since the runtime doesn't provide garantees as to when the reap occurs, so we
                 // warn him here.
-                tracing::warn!("Browser was not closed manually, it will be killed automatically in the background");
+                tracing::warn!(
+                    "Browser was not closed manually, it will be killed automatically in the background"
+                );
             }
         }
     }

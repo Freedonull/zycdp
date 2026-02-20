@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Bump fetcher chromium to `r1585606`
+- Bump CDP to `r1566079`
 - Use a struct `Arg` for arguments to combine flags automatically
 - Browser process no longer inherits stdout
 

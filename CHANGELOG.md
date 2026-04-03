@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- `ScreenshotParams` and `ScreenshotParamsBuilder` now derive `Clone`
+- Derive `Clone` for `Element`, `ScreenshotParams` and `ScreenshotParamsBuilder`
 
 ## [0.9.1] 2026-02-25
 

@@ -137,11 +137,27 @@ impl ChaserPage {
     /// ```
     pub async fn apply_profile(&self, profile: &ChaserProfile) -> Result<()> {
         if profile.native_ua_data() {
-            // Native profile: skip Emulation.setUserAgentOverride entirely.
-            // The browser already sends the correct UA and Sec-CH-UA headers.
-            // Activating the emulation layer (even with identical values) adds
-            // detectable side effects — CF's challenge JS can observe that the
-            // browser is running in an emulated context.
+            // Native profile: call setUserAgentOverride only to replace
+            // "HeadlessChrome" with "Chrome" in the UA string (headless Chrome
+            // uses "HeadlessChrome" by default, which is an obvious bot signal).
+            // We do NOT set userAgentMetadata so Sec-CH-UA headers stay as the
+            // browser's real values — no mismatch between HTTP headers and JS.
+            let ua = profile.user_agent();
+            // Fix "HeadlessChrome" → "Chrome" (new headless mode should do this
+            // too, but some Chrome versions on Linux still emit "HeadlessChrome").
+            let ua = ua.replace("HeadlessChrome/", "Chrome/");
+            self.page
+                .execute(
+                    EmulationSetUserAgentOverrideParams::builder()
+                        .user_agent(ua)
+                        .accept_language(profile.locale().to_string())
+                        .platform(profile.os().platform().to_string())
+                        .build()
+                        .map_err(|e| anyhow!("{}", e))?,
+                )
+                .await
+                .map_err(|e| anyhow!("{}", e))?;
+
             self.page
                 .execute(AddScriptToEvaluateOnNewDocumentParams {
                     source: profile.bootstrap_script(),
@@ -165,9 +181,7 @@ impl ChaserPage {
             return Ok(());
         }
 
-        let ua_params = if profile.native_ua_data() {
-            unreachable!()
-        } else {
+        let ua_params = {
             let ver = profile.chrome_version().to_string();
             let full_ver = format!("{}.0.0.0", ver);
 

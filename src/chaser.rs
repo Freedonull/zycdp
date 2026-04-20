@@ -3,8 +3,9 @@ use crate::profiles::ChaserProfile;
 use anyhow::{Result, anyhow};
 use base64::{Engine, engine::general_purpose::STANDARD};
 use chromiumoxide_cdp::cdp::browser_protocol::emulation::{
-    SetFocusEmulationEnabledParams, SetUserAgentOverrideParams as EmulationSetUserAgentOverrideParams,
-    UserAgentBrandVersion, UserAgentMetadata,
+    SetDeviceMetricsOverrideParams, SetFocusEmulationEnabledParams,
+    SetUserAgentOverrideParams as EmulationSetUserAgentOverrideParams, UserAgentBrandVersion,
+    UserAgentMetadata,
 };
 use chromiumoxide_cdp::cdp::browser_protocol::fetch::{
     ContinueRequestParams, DisableParams as FetchDisableParams, EnableParams as FetchEnableParams,
@@ -167,6 +168,30 @@ impl ChaserPage {
                 })
                 .await
                 .map_err(|e| anyhow!("{}", e))?;
+
+            // Fix screen.width/height for headless mode.
+            // Headless Chrome reports screen.width=800, screen.height=600 by default
+            // while --window-size sets the window to 1920x1080. The mismatch
+            // (innerWidth=1920 > screen.width=800) is physically impossible and is a
+            // known headless detection signal. setDeviceMetricsOverride with
+            // screenWidth/screenHeight overrides these at the browser level, so
+            // screen.width returns the correct native value (not a JS wrapper).
+            let sw = profile.screen_width() as i64;
+            let sh = profile.screen_height() as i64;
+            let _ = self
+                .page
+                .execute(
+                    SetDeviceMetricsOverrideParams::builder()
+                        .width(0)
+                        .height(0)
+                        .device_scale_factor(0.0)
+                        .mobile(false)
+                        .screen_width(sw)
+                        .screen_height(sh)
+                        .build()
+                        .map_err(|e| anyhow!("{}", e))?,
+                )
+                .await;
 
             self.page
                 .execute(

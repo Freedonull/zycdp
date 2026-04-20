@@ -456,13 +456,18 @@ impl BrowserConfig {
 }
 
 /// These are passed to the Chrome binary by default.
-/// Via https://github.com/puppeteer/puppeteer/blob/4846b8723cf20d3551c0d755df394cc5e0c82a94/src/node/Launcher.ts#L157
-static DEFAULT_ARGS: [ArgConst; 23] = [
+///
+/// Derived from Puppeteer's DEFAULT_ARGS but with automation-signalling flags
+/// removed. Specifically dropped vs the legacy Puppeteer list:
+///   - `--metrics-recording-only` — patchright removes this explicitly; it
+///     signals a testing/automation context and has no benefit for real use.
+///   - `--enable-features=NetworkService,NetworkServiceInProcess` — these
+///     features graduated to stable default in Chrome 80; explicitly setting
+///     them is an old automation fingerprint.
+///   - `--enable-blink-features=IdleDetection` — explicitly enabling a
+///     non-default Blink API is unusual and detectable via `typeof IdleDetector`.
+static DEFAULT_ARGS: [ArgConst; 19] = [
     ArgConst::key("disable-background-networking"),
-    ArgConst::values(
-        "enable-features",
-        &["NetworkService", "NetworkServiceInProcess"],
-    ),
     ArgConst::key("disable-background-timer-throttling"),
     ArgConst::key("disable-backgrounding-occluded-windows"),
     ArgConst::key("disable-breakpad"),
@@ -478,10 +483,7 @@ static DEFAULT_ARGS: [ArgConst; 23] = [
     ArgConst::key("disable-renderer-backgrounding"),
     ArgConst::key("disable-sync"),
     ArgConst::values("force-color-profile", &["srgb"]),
-    ArgConst::key("metrics-recording-only"),
     ArgConst::key("no-first-run"),
     ArgConst::values("password-store", &["basic"]),
     ArgConst::key("use-mock-keychain"),
-    ArgConst::values("enable-blink-features", &["IdleDetection"]),
-    ArgConst::values("lang", &["en_US"]),
 ];

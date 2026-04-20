@@ -456,19 +456,63 @@ impl ChaserProfile {
                 if (!window.chrome.app) {{
                     window.chrome.app = {{
                         isInstalled: false,
-                        InstallState: {{ 
-                            DISABLED: 'disabled', 
-                            INSTALLED: 'installed', 
-                            NOT_INSTALLED: 'not_installed' 
+                        InstallState: {{
+                            DISABLED: 'disabled',
+                            INSTALLED: 'installed',
+                            NOT_INSTALLED: 'not_installed'
                         }},
-                        RunningState: {{ 
-                            CANNOT_RUN: 'cannot_run', 
-                            READY_TO_RUN: 'ready_to_run', 
-                            RUNNING: 'running' 
+                        RunningState: {{
+                            CANNOT_RUN: 'cannot_run',
+                            READY_TO_RUN: 'ready_to_run',
+                            RUNNING: 'running'
                         }},
                         getDetails: function() {{ return null; }},
                         getIsInstalled: function() {{ return false; }}
                     }};
+                }}
+
+                // 8. navigator.languages — align with the configured locale
+                // e.g. locale "en-US" → ["en-US", "en"]
+                (function() {{
+                    const loc = '{locale}';
+                    const base = loc.split('-')[0];
+                    const langs = loc === base ? [loc] : [loc, base];
+                    Object.defineProperty(Navigator.prototype, 'language', {{
+                        get: () => loc,
+                        configurable: true
+                    }});
+                    Object.defineProperty(Navigator.prototype, 'languages', {{
+                        get: () => Object.freeze(langs),
+                        configurable: true
+                    }});
+                }})();
+
+                // 9. navigator.permissions.query — return same state as Notification.permission
+                // Inconsistency between the two is a known bot-detection signal.
+                if (window.navigator.permissions) {{
+                    const _origQuery = window.navigator.permissions.query.bind(window.navigator.permissions);
+                    Object.defineProperty(window.navigator.permissions.__proto__, 'query', {{
+                        value: function query(parameters) {{
+                            if (parameters && parameters.name === 'notifications') {{
+                                let state;
+                                try {{ state = Notification.permission; }} catch (_) {{ state = 'default'; }}
+                                return Promise.resolve({{ state: state || 'default', onchange: null }});
+                            }}
+                            return _origQuery(parameters);
+                        }},
+                        configurable: true,
+                        writable: true
+                    }});
+                }}
+
+                // 10. navigator.serviceWorker.register — no-op to prevent detection
+                // (patchright patch: service worker registration is a fingerprinting vector)
+                if (navigator.serviceWorker) {{
+                    Object.defineProperty(navigator.serviceWorker, 'register', {{
+                        value: async function() {{ return Promise.resolve(); }},
+                        configurable: true,
+                        writable: true
+                    }});
                 }}
             }})();
         "#,
@@ -482,6 +526,7 @@ impl ChaserProfile {
             hints_platform = self.os.hints_platform(),
             platform_version = self.os.platform_version(),
             architecture = self.os.architecture(),
+            locale = self.locale,
         );
 
         // Prevent CDP detection via worker threads

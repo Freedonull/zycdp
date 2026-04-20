@@ -3,8 +3,8 @@ use crate::profiles::ChaserProfile;
 use anyhow::{Result, anyhow};
 use base64::{Engine, engine::general_purpose::STANDARD};
 use chromiumoxide_cdp::cdp::browser_protocol::emulation::{
-    SetUserAgentOverrideParams as EmulationSetUserAgentOverrideParams, UserAgentBrandVersion,
-    UserAgentMetadata,
+    SetFocusEmulationEnabledParams, SetUserAgentOverrideParams as EmulationSetUserAgentOverrideParams,
+    UserAgentBrandVersion, UserAgentMetadata,
 };
 use chromiumoxide_cdp::cdp::browser_protocol::fetch::{
     ContinueRequestParams, DisableParams as FetchDisableParams, EnableParams as FetchEnableParams,
@@ -187,6 +187,19 @@ impl ChaserPage {
                 include_command_line_api: None,
                 run_immediately: None,
             })
+            .await
+            .map_err(|e| anyhow!("{}", e))?;
+
+        // Simulate a focused, active page so document.hasFocus() and
+        // document.visibilityState return the same values as a real user session.
+        // Without this, headless Chrome reports hasFocus=false / visibilityState='hidden'.
+        self.page
+            .execute(
+                SetFocusEmulationEnabledParams::builder()
+                    .enabled(true)
+                    .build()
+                    .map_err(|e| anyhow!("{}", e))?,
+            )
             .await
             .map_err(|e| anyhow!("{}", e))?;
 

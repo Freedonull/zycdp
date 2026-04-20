@@ -609,36 +609,9 @@ impl ChaserProfile {
     ///   2. Stubs `chrome.runtime` APIs that Chromium on Linux may not expose but that
     ///      some sites require (e.g. `chrome.runtime.connect`).
     fn native_bootstrap_script() -> String {
-        r#"(function () {
-            // 1. Remove ChromeDriver / Selenium automation markers (safe — just deletes props).
-            for (const prop of Object.getOwnPropertyNames(window)) {
-                if (/^cdc_|^\$cdc_|^__webdriver|^__selenium|^__driver|^\$chrome_/.test(prop)) {
-                    try { delete window[prop]; } catch (_) {}
-                }
-            }
-
-            // 2. chrome.runtime stubs — Chromium Linux may lack these; sites check them.
-            if (!window.chrome) window.chrome = {};
-            const rt = window.chrome.runtime || (window.chrome.runtime = {});
-            if (!rt.connect) {
-                rt.connect = function() {
-                    return {
-                        name: '', sender: undefined,
-                        onDisconnect: { addListener() {}, removeListener() {}, hasListener() { return false; } },
-                        onMessage:    { addListener() {}, removeListener() {}, hasListener() { return false; } },
-                        postMessage() {}, disconnect() {}
-                    };
-                };
-            }
-            if (!rt.sendMessage) rt.sendMessage = function() { return; };
-            if (!window.chrome.app) {
-                window.chrome.app = {
-                    isInstalled: false,
-                    getDetails: function() { return null; },
-                    getIsInstalled: function() { return false; }
-                };
-            }
-        })();"#.to_string()
+        // For native profiles, return empty — the browser's own properties are
+        // already correct and any JS injection risks non-native toString() detection.
+        String::new()
     }
 }
 

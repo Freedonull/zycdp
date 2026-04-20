@@ -159,15 +159,21 @@ impl ChaserPage {
                 .await
                 .map_err(|e| anyhow!("{}", e))?;
 
-            self.page
-                .execute(AddScriptToEvaluateOnNewDocumentParams {
-                    source: profile.bootstrap_script(),
-                    world_name: None,
-                    include_command_line_api: None,
-                    run_immediately: None,
-                })
-                .await
-                .map_err(|e| anyhow!("{}", e))?;
+            // Only inject bootstrap if it's non-empty — native profiles use a
+            // minimal script; if that ever becomes a detection vector we can
+            // turn it off here entirely.
+            let boot = profile.bootstrap_script();
+            if !boot.trim().is_empty() {
+                self.page
+                    .execute(AddScriptToEvaluateOnNewDocumentParams {
+                        source: boot,
+                        world_name: None,
+                        include_command_line_api: None,
+                        run_immediately: None,
+                    })
+                    .await
+                    .map_err(|e| anyhow!("{}", e))?;
+            }
 
             // Fix screen.width/height for headless mode.
             // Headless Chrome reports screen.width=800, screen.height=600 by default

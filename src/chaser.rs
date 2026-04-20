@@ -136,16 +136,37 @@ impl ChaserPage {
     /// chaser.inner().goto("https://example.com").await?;
     /// ```
     pub async fn apply_profile(&self, profile: &ChaserProfile) -> Result<()> {
+        if profile.native_ua_data() {
+            // Native profile: skip Emulation.setUserAgentOverride entirely.
+            // The browser already sends the correct UA and Sec-CH-UA headers.
+            // Activating the emulation layer (even with identical values) adds
+            // detectable side effects — CF's challenge JS can observe that the
+            // browser is running in an emulated context.
+            self.page
+                .execute(AddScriptToEvaluateOnNewDocumentParams {
+                    source: profile.bootstrap_script(),
+                    world_name: None,
+                    include_command_line_api: None,
+                    run_immediately: None,
+                })
+                .await
+                .map_err(|e| anyhow!("{}", e))?;
+
+            self.page
+                .execute(
+                    SetFocusEmulationEnabledParams::builder()
+                        .enabled(true)
+                        .build()
+                        .map_err(|e| anyhow!("{}", e))?,
+                )
+                .await
+                .map_err(|e| anyhow!("{}", e))?;
+
+            return Ok(());
+        }
+
         let ua_params = if profile.native_ua_data() {
-            // Native profile: only override UA string and accept-language.
-            // Leave Sec-CH-UA-* headers as the browser's real values so HTTP
-            // headers and navigator.userAgentData in JS stay perfectly consistent.
-            EmulationSetUserAgentOverrideParams::builder()
-                .user_agent(profile.user_agent())
-                .accept_language(profile.locale().to_string())
-                .platform(profile.os().platform().to_string())
-                .build()
-                .map_err(|e| anyhow!("{}", e))?
+            unreachable!()
         } else {
             let ver = profile.chrome_version().to_string();
             let full_ver = format!("{}.0.0.0", ver);

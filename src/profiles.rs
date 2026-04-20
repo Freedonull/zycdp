@@ -287,6 +287,9 @@ impl ChaserProfile {
 
     /// Generate the complete JavaScript bootstrap script for this profile
     pub fn bootstrap_script(&self) -> String {
+        if self.native_ua_data {
+            return Self::native_bootstrap_script();
+        }
         let mut script = format!(
             r#"
             (function() {{
@@ -595,6 +598,47 @@ impl ChaserProfile {
 
         script.push_str(&worker_script);
         script
+    }
+
+    /// Minimal bootstrap for native profiles (`native_ua_data = true`).
+    ///
+    /// Native profiles use the browser's real UA, Sec-CH-UA, platform, and navigator
+    /// properties — overriding them with JS would make them non-native (detectable via
+    /// `toString()`). This script only does two safe things:
+    ///   1. Deletes any CDP automation markers left by ChromeDriver/Selenium.
+    ///   2. Stubs `chrome.runtime` APIs that Chromium on Linux may not expose but that
+    ///      some sites require (e.g. `chrome.runtime.connect`).
+    fn native_bootstrap_script() -> String {
+        r#"(function () {
+            // 1. Remove ChromeDriver / Selenium automation markers (safe — just deletes props).
+            for (const prop of Object.getOwnPropertyNames(window)) {
+                if (/^cdc_|^\$cdc_|^__webdriver|^__selenium|^__driver|^\$chrome_/.test(prop)) {
+                    try { delete window[prop]; } catch (_) {}
+                }
+            }
+
+            // 2. chrome.runtime stubs — Chromium Linux may lack these; sites check them.
+            if (!window.chrome) window.chrome = {};
+            const rt = window.chrome.runtime || (window.chrome.runtime = {});
+            if (!rt.connect) {
+                rt.connect = function() {
+                    return {
+                        name: '', sender: undefined,
+                        onDisconnect: { addListener() {}, removeListener() {}, hasListener() { return false; } },
+                        onMessage:    { addListener() {}, removeListener() {}, hasListener() { return false; } },
+                        postMessage() {}, disconnect() {}
+                    };
+                };
+            }
+            if (!rt.sendMessage) rt.sendMessage = function() { return; };
+            if (!window.chrome.app) {
+                window.chrome.app = {
+                    isInstalled: false,
+                    getDetails: function() { return null; },
+                    getIsInstalled: function() { return false; }
+                };
+            }
+        })();"#.to_string()
     }
 }
 

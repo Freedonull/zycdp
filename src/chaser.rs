@@ -136,46 +136,58 @@ impl ChaserPage {
     /// chaser.inner().goto("https://example.com").await?;
     /// ```
     pub async fn apply_profile(&self, profile: &ChaserProfile) -> Result<()> {
-        let ver = profile.chrome_version().to_string();
-        let full_ver = format!("{}.0.0.0", ver);
+        let ua_params = if profile.native_ua_data() {
+            // Native profile: only override UA string and accept-language.
+            // Leave Sec-CH-UA-* headers as the browser's real values so HTTP
+            // headers and navigator.userAgentData in JS stay perfectly consistent.
+            EmulationSetUserAgentOverrideParams::builder()
+                .user_agent(profile.user_agent())
+                .accept_language(profile.locale().to_string())
+                .platform(profile.os().platform().to_string())
+                .build()
+                .map_err(|e| anyhow!("{}", e))?
+        } else {
+            let ver = profile.chrome_version().to_string();
+            let full_ver = format!("{}.0.0.0", ver);
 
-        let brand = |name: &str, v: &str| UserAgentBrandVersion {
-            brand: name.to_string(),
-            version: v.to_string(),
+            let brand = |name: &str, v: &str| UserAgentBrandVersion {
+                brand: name.to_string(),
+                version: v.to_string(),
+            };
+
+            let metadata = UserAgentMetadata {
+                brands: Some(vec![
+                    brand("Google Chrome", &ver),
+                    brand("Chromium", &ver),
+                    brand("Not=A?Brand", "24"),
+                ]),
+                full_version_list: Some(vec![
+                    brand("Google Chrome", &full_ver),
+                    brand("Chromium", &full_ver),
+                    brand("Not=A?Brand", "24.0.0.0"),
+                ]),
+                platform: profile.os().hints_platform().to_string(),
+                platform_version: profile.os().platform_version().to_string(),
+                architecture: profile.os().architecture().to_string(),
+                model: String::new(),
+                mobile: false,
+                bitness: Some("64".to_string()),
+                wow64: Some(false),
+                form_factors: None,
+            };
+
+            EmulationSetUserAgentOverrideParams::builder()
+                .user_agent(profile.user_agent())
+                .accept_language(profile.locale().to_string())
+                .platform(profile.os().platform().to_string())
+                .user_agent_metadata(metadata)
+                .build()
+                .map_err(|e| anyhow!("{}", e))?
         };
 
-        let metadata = UserAgentMetadata {
-            brands: Some(vec![
-                brand("Google Chrome", &ver),
-                brand("Chromium", &ver),
-                brand("Not=A?Brand", "24"),
-            ]),
-            full_version_list: Some(vec![
-                brand("Google Chrome", &full_ver),
-                brand("Chromium", &full_ver),
-                brand("Not=A?Brand", "24.0.0.0"),
-            ]),
-            platform: profile.os().hints_platform().to_string(),
-            platform_version: profile.os().platform_version().to_string(),
-            architecture: profile.os().architecture().to_string(),
-            model: String::new(),
-            mobile: false,
-            bitness: Some("64".to_string()),
-            wow64: Some(false),
-            form_factors: None,
-        };
-
-        // Set UA + Sec-CH-UA-* headers together so they're always consistent
+        // Set UA + Sec-CH-UA-* headers
         self.page
-            .execute(
-                EmulationSetUserAgentOverrideParams::builder()
-                    .user_agent(profile.user_agent())
-                    .accept_language(profile.locale().to_string())
-                    .platform(profile.os().platform().to_string())
-                    .user_agent_metadata(metadata)
-                    .build()
-                    .map_err(|e| anyhow!("{}", e))?,
-            )
+            .execute(ua_params)
             .await
             .map_err(|e| anyhow!("{}", e))?;
 

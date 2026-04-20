@@ -159,6 +159,11 @@ pub struct ChaserProfile {
     timezone: String,
     screen_width: u32,
     screen_height: u32,
+    /// When true, skip overriding navigator.userAgentData in JS and
+    /// Emulation.setUserAgentOverride metadata in CDP. Use this for native
+    /// profiles so HTTP Sec-CH-UA headers and JS navigator.userAgentData
+    /// both reflect the real browser binary (no mismatch for Cloudflare to detect).
+    pub native_ua_data: bool,
 }
 
 impl Default for ChaserProfile {
@@ -186,6 +191,7 @@ impl ChaserProfile {
             timezone: "America/New_York".to_string(),
             screen_width: 1920,
             screen_height: 1080,
+            native_ua_data: false,
         }
     }
 
@@ -211,11 +217,16 @@ impl ChaserProfile {
 
     /// Create a profile matching the current host OS, with optional Chrome version auto-detection.
     /// Reads actual system RAM and tries to detect the installed Chrome version.
+    /// Sets `native_ua_data = true` so HTTP Sec-CH-UA headers and JS navigator.userAgentData
+    /// both reflect the real browser binary — no inconsistency for Cloudflare to detect.
     pub fn native() -> ChaserProfileBuilder {
         let os = detect_current_os();
         let chrome = detect_chrome_version().unwrap_or(131);
         let memory = detect_system_memory_gb();
-        Self::new(os).chrome_version(chrome).memory_gb(memory)
+        Self::new(os)
+            .chrome_version(chrome)
+            .memory_gb(memory)
+            .native_ua_data(true)
     }
 
     // Getters
@@ -245,6 +256,9 @@ impl ChaserProfile {
     }
     pub fn screen_height(&self) -> u32 {
         self.screen_height
+    }
+    pub fn native_ua_data(&self) -> bool {
+        self.native_ua_data
     }
 
     /// Returns the valid `navigator.deviceMemory` value (spec allows: 0.25, 0.5, 1, 2, 4, 8).
@@ -335,36 +349,7 @@ impl ChaserProfile {
                     spoofWebGL(WebGL2RenderingContext.prototype);
                 }}
 
-                // 4. Client Hints (on prototype)
-                Object.defineProperty(Navigator.prototype, 'userAgentData', {{
-                    get: () => ({{
-                        brands: [
-                            {{ brand: "Google Chrome", version: "{chrome_ver}" }},
-                            {{ brand: "Chromium", version: "{chrome_ver}" }},
-                            {{ brand: "Not=A?Brand", version: "24" }}
-                        ],
-                        mobile: false,
-                        platform: "{hints_platform}"
-                    }}),
-                    configurable: true
-                }});
-
-                Object.defineProperty(Navigator.prototype.userAgentData.__proto__, 'getHighEntropyValues', {{
-                    value: async function(hints) {{
-                        const values = {{}};
-                        for (const hint of hints) {{
-                            if (hint === 'platform') values.platform = "{hints_platform}";
-                            else if (hint === 'platformVersion') values.platformVersion = "{platform_version}";
-                            else if (hint === 'architecture') values.architecture = "{architecture}";
-                            else if (hint === 'model') values.model = "";
-                            else if (hint === 'bitness') values.bitness = "64";
-                            else if (hint === 'uaFullVersion') values.uaFullVersion = "{chrome_ver}.0.0.0";
-                        }}
-                        return values;
-
-                    }},
-                    configurable: true
-                }});
+                {ua_data_block}
 
                 // 5. Video Codecs
                 const canPlayType = HTMLMediaElement.prototype.canPlayType;
@@ -522,11 +507,47 @@ impl ChaserProfile {
             device_memory = self.device_memory_value(),
             webgl_vendor = self.gpu.vendor(),
             webgl_renderer = self.gpu.renderer(),
-            chrome_ver = self.chrome_version,
-            hints_platform = self.os.hints_platform(),
-            platform_version = self.os.platform_version(),
-            architecture = self.os.architecture(),
             locale = self.locale,
+            ua_data_block = if self.native_ua_data {
+                String::new()
+            } else {
+                format!(
+                    r#"// 4. Client Hints (only for non-native profiles — native profiles use the
+                // browser's real Sec-CH-UA so HTTP headers and JS stay consistent)
+                Object.defineProperty(Navigator.prototype, 'userAgentData', {{
+                    get: () => ({{
+                        brands: [
+                            {{ brand: "Google Chrome", version: "{cv}" }},
+                            {{ brand: "Chromium", version: "{cv}" }},
+                            {{ brand: "Not=A?Brand", version: "24" }}
+                        ],
+                        mobile: false,
+                        platform: "{hp}"
+                    }}),
+                    configurable: true
+                }});
+
+                Object.defineProperty(Navigator.prototype.userAgentData.__proto__, 'getHighEntropyValues', {{
+                    value: async function(hints) {{
+                        const values = {{}};
+                        for (const hint of hints) {{
+                            if (hint === 'platform') values.platform = "{hp}";
+                            else if (hint === 'platformVersion') values.platformVersion = "{pv}";
+                            else if (hint === 'architecture') values.architecture = "{arch}";
+                            else if (hint === 'model') values.model = "";
+                            else if (hint === 'bitness') values.bitness = "64";
+                            else if (hint === 'uaFullVersion') values.uaFullVersion = "{cv}.0.0.0";
+                        }}
+                        return values;
+                    }},
+                    configurable: true
+                }});"#,
+                    cv = self.chrome_version,
+                    hp = self.os.hints_platform(),
+                    pv = self.os.platform_version(),
+                    arch = self.os.architecture(),
+                )
+            },
         );
 
         // Prevent CDP detection via worker threads
@@ -599,6 +620,7 @@ pub struct ChaserProfileBuilder {
     timezone: String,
     screen_width: u32,
     screen_height: u32,
+    native_ua_data: bool,
 }
 
 impl ChaserProfileBuilder {
@@ -646,6 +668,13 @@ impl ChaserProfileBuilder {
     }
 
     /// Build the final profile
+    /// Skip overriding navigator.userAgentData in JS and Sec-CH-UA metadata in
+    /// CDP. Use for native profiles where the browser's own values are correct.
+    pub fn native_ua_data(mut self, native: bool) -> Self {
+        self.native_ua_data = native;
+        self
+    }
+
     pub fn build(self) -> ChaserProfile {
         ChaserProfile {
             os: self.os,
@@ -657,6 +686,7 @@ impl ChaserProfileBuilder {
             timezone: self.timezone,
             screen_width: self.screen_width,
             screen_height: self.screen_height,
+            native_ua_data: self.native_ua_data,
         }
     }
 }

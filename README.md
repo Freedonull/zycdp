@@ -1,3 +1,5 @@
+<a href="https://chaser.sh"><img src="banner.png" alt="Chaser — The Infrastructure Platform" width="100%"/></a>
+
 # chaser-oxide
 
 [![Crates.io](https://img.shields.io/crates/v/chaser-oxide.svg)](https://crates.io/crates/chaser-oxide)
@@ -5,6 +7,8 @@
 [![License](https://img.shields.io/crates/l/chaser-oxide.svg)](https://github.com/ccheshirecat/chaser-oxide)
 
 **A Rust-based fork of `chromiumoxide` for hardened, undetectable browser automation.**
+
+The stealth CDP layer running in production at [chaser.sh](https://chaser.sh) — 13,000+ V8 patches, no-JS protocol stealth, kernel-level egress, 300+ concurrent sessions on a single node.
 
 chaser-oxide modifies the Chrome DevTools Protocol (CDP) client at the transport and protocol layer to reduce the detection footprint of automated browser sessions. The default profile auto-detects your host OS, Chrome version, and RAM — no hardcoded Windows spoofing out of the box.
 
@@ -280,3 +284,9 @@ Licensed under either of:
 
 - Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
 - MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+
+---
+
+<p align="center">
+  <sub>Part of the <a href="https://chaser.sh"><strong>Chaser</strong></a> open-source ecosystem &nbsp;·&nbsp; <a href="https://chaser.sh/sprinter">Run it on your own infrastructure →</a></sub>
+</p>

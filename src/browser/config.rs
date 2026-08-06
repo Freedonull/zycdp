@@ -466,7 +466,7 @@ impl BrowserConfig {
 ///     them is an old automation fingerprint.
 ///   - `--enable-blink-features=IdleDetection` — explicitly enabling a
 ///     non-default Blink API is unusual and detectable via `typeof IdleDetector`.
-static DEFAULT_ARGS: [ArgConst; 19] = [
+static DEFAULT_ARGS: [ArgConst; 21] = [
     ArgConst::key("disable-background-networking"),
     ArgConst::key("disable-background-timer-throttling"),
     ArgConst::key("disable-backgrounding-occluded-windows"),
@@ -486,4 +486,13 @@ static DEFAULT_ARGS: [ArgConst; 19] = [
     ArgConst::key("no-first-run"),
     ArgConst::values("password-store", &["basic"]),
     ArgConst::key("use-mock-keychain"),
+    // WebRTC 防泄漏：禁止非代理 UDP，强制 WebRTC ICE 收集只走代理/relay。
+    // 不加这两项时，RTCPeerConnection 的 STUN 收集会绕过 HTTP 代理暴露真实
+    // 公网/本地 IP（反爬经典检测：HTTP 走代理但 WebRTC 泄漏真实 IP）。
+    // `disable_non_proxied_udp` 让 WebRTC 仍可用，只是不收集会泄漏 IP 的 candidate。
+    ArgConst::values(
+        "force-webrtc-ip-handling-policy",
+        &["disable_non_proxied_udp"],
+    ),
+    ArgConst::key("enforce-webrtc-ip-permission-check"),
 ];

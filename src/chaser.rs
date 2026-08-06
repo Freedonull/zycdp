@@ -30,6 +30,27 @@ pub struct Point {
     pub y: f64,
 }
 
+/// 页面加载状态（用于 [`ChaserPage::wait_for_load_state`]）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LoadState {
+    /// DOM 树解析完成（早于 load）。
+    DomContentLoaded,
+    /// 所有资源（图片/样式等）加载完成——`goto` 默认等待的状态。
+    Load,
+    /// 500ms 内无网络请求（SPA 数据加载完毕的标志）。
+    NetworkIdle,
+}
+
+impl LoadState {
+    fn as_str(self) -> &'static str {
+        match self {
+            LoadState::DomContentLoaded => "DOMContentLoaded",
+            LoadState::Load => "load",
+            LoadState::NetworkIdle => "networkIdle",
+        }
+    }
+}
+
 /// JavaScript 弹窗类型（alert / confirm / prompt / beforeunload）。
 ///
 /// 在 [`ChaserPage::on_dialog`] 的回调里用于区分弹窗种类，决定如何处理。
@@ -115,6 +136,51 @@ impl ChaserPage {
     pub async fn goto(&self, url: &str) -> Result<()> {
         self.page.goto(url).await.map_err(|e| anyhow!("{}", e))?;
         Ok(())
+    }
+
+    /// 等待页面到达指定生命周期状态（比 `goto` 默认的 `load` 更细粒度）。
+    ///
+    /// SPA 站点 `load` 触发时数据还没加载完，常需等 `NetworkIdle`（500ms 无网络
+    /// 请求）。在 `goto` 之后调用本方法补充等待。
+    ///
+    /// # 示例
+    /// ```rust,ignore
+    /// chaser.goto("https://spa-site.com").await?;
+    /// chaser.wait_for_load_state(LoadState::NetworkIdle, Duration::from_secs(30)).await?;
+    /// // 此时 SPA 数据已加载完毕
+    /// ```
+    pub async fn wait_for_load_state(
+        &self,
+        state: LoadState,
+        timeout: std::time::Duration,
+    ) -> Result<()> {
+        use chromiumoxide_cdp::cdp::browser_protocol::page::EventLifecycleEvent;
+        use futures::StreamExt;
+
+        let target = state.as_str();
+        let mut stream = self
+            .page
+            .event_listener::<EventLifecycleEvent>()
+            .await
+            .map_err(|e| anyhow!("订阅 lifecycle 事件失败: {}", e))?;
+
+        loop {
+            match tokio::time::timeout(timeout, stream.next()).await {
+                Err(_) => {
+                    return Err(anyhow!(
+                        "wait_for_load_state 超时（{:?}）等待 {}",
+                        timeout,
+                        target
+                    ));
+                }
+                Ok(None) => return Err(anyhow!("lifecycle 事件流关闭")),
+                Ok(Some(ev)) => {
+                    if ev.name == target {
+                        return Ok(());
+                    }
+                }
+            }
+        }
     }
 
     /// Get the page HTML content (stealth-safe).
@@ -527,6 +593,191 @@ impl ChaserPage {
         Ok(())
     }
 
+    // ========== 响应体捕获（Network.getResponseBody） ==========
+    //
+    // 与请求拦截（Fetch 域）的区别：请求拦截只能修改/拒绝请求，拿不到响应 body。
+    // 响应捕获订阅 Network 域事件，在响应加载完成后读取 body——SPA 采集核心模式
+    // （等接口返回 → 解析 JSON）。Network 域默认已 enable（非 stealth 检测点）。
+
+    /// 阻塞等待匹配 `url_pattern`（子串匹配）的响应完成，返回其 body。
+    ///
+    /// 典型用法：导航前调用，等 SPA 的 XHR 接口返回数据。
+    /// ```rust,ignore
+    /// // 等待 API 接口返回 JSON
+    /// let body = chaser.wait_for_response("/api/users", Duration::from_secs(15)).await?;
+    /// let users: Vec<User> = serde_json::from_str(&body)?;
+    /// ```
+    pub async fn wait_for_response(
+        &self,
+        url_pattern: &str,
+        timeout: std::time::Duration,
+    ) -> Result<String> {
+        use chromiumoxide_cdp::cdp::browser_protocol::network::{
+            EventLoadingFinished, EventResponseReceived, GetResponseBodyParams,
+        };
+        use futures::StreamExt;
+
+        let mut resp_stream = self
+            .page
+            .event_listener::<EventResponseReceived>()
+            .await
+            .map_err(|e| anyhow!("订阅 responseReceived 失败: {}", e))?;
+        let mut finish_stream = self
+            .page
+            .event_listener::<EventLoadingFinished>()
+            .await
+            .map_err(|e| anyhow!("订阅 loadingFinished 失败: {}", e))?;
+
+        // 收集已见响应的 requestId（按 url 匹配）
+        let matched_ids: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+        let matched_ids_resp = Arc::clone(&matched_ids);
+
+        // 任务 1：监听响应到达，按 url 匹配记录 requestId
+        let pattern = url_pattern.to_string();
+        let resp_task = tokio::spawn(async move {
+            while let Some(ev) = resp_stream.next().await {
+                if ev.response.url.contains(&pattern) {
+                    matched_ids_resp
+                        .lock()
+                        .unwrap()
+                        .push(ev.request_id.clone().into());
+                }
+            }
+        });
+
+        // 任务 2：监听加载完成，若该 requestId 已匹配则读取 body
+        let page = self.page.clone();
+        let finish_task = tokio::spawn(async move {
+            while let Some(ev) = finish_stream.next().await {
+                let rid: String = ev.request_id.clone().into();
+                let is_matched = matched_ids.lock().unwrap().iter().any(|r| r == &rid);
+                if is_matched {
+                    // body 此时已就绪，读取返回
+                    let cmd = GetResponseBodyParams::new(ev.request_id.clone());
+                    match page.execute(cmd).await {
+                        Ok(resp) => return Some(resp.result.body),
+                        Err(_) => continue,
+                    }
+                }
+            }
+            None
+        });
+
+        // 带超时等待 body
+        let result = tokio::time::timeout(timeout, finish_task).await;
+        resp_task.abort();
+        match result {
+            Ok(Ok(Some(body))) => Ok(body),
+            Ok(Ok(None)) => Err(anyhow!(
+                "响应流关闭，未捕获到匹配 '{}' 的 body",
+                url_pattern
+            )),
+            Ok(Err(e)) => Err(anyhow!("wait_for_response 任务失败: {}", e)),
+            Err(_) => Err(anyhow!(
+                "wait_for_response 超时（{:?}）未匹配到 '{}'",
+                timeout,
+                url_pattern
+            )),
+        }
+    }
+
+    // ========== 文件下载（Browser.setDownloadBehavior） ==========
+
+    /// 配置下载目录并开启下载事件。调用后，页面触发的下载会自动保存到 `dir`。
+    ///
+    /// 配合 [`wait_for_download`] 等待下载完成。
+    ///
+    /// # 示例
+    /// ```rust,ignore
+    /// chaser.enable_downloads("/tmp/downloads").await?;
+    /// chaser.click_by_text("导出 CSV").await?;  // 触发下载
+    /// let info = chaser.wait_for_download(Duration::from_secs(60)).await?;
+    /// println!("已下载: {} -> {:?}", info.filename, info.filepath);
+    /// ```
+    pub async fn enable_downloads(&self, dir: impl AsRef<str>) -> Result<()> {
+        use chromiumoxide_cdp::cdp::browser_protocol::browser::{
+            SetDownloadBehaviorBehavior, SetDownloadBehaviorParams,
+        };
+
+        self.page
+            .execute(
+                SetDownloadBehaviorParams::builder()
+                    .behavior(SetDownloadBehaviorBehavior::Allow)
+                    .download_path(dir.as_ref().to_string())
+                    .events_enabled(true)
+                    .build()
+                    .unwrap(),
+            )
+            .await
+            .map_err(|e| anyhow!("setDownloadBehavior 失败: {}", e))?;
+        Ok(())
+    }
+
+    /// 阻塞等待一次下载完成（需先调 `enable_downloads`），返回文件名和落盘路径。
+    ///
+    /// `filepath` 来自 CDP 的 `EventDownloadProgress`（state=Completed 时提供），
+    /// 取决于平台不一定保证已设置，建议用 `filename` 在下载目录自行拼接校验。
+    pub async fn wait_for_download(&self, timeout: std::time::Duration) -> Result<DownloadInfo> {
+        use chromiumoxide_cdp::cdp::browser_protocol::browser::{
+            DownloadProgressState, EventDownloadProgress, EventDownloadWillBegin,
+        };
+        use futures::StreamExt;
+
+        let mut begin_stream = self
+            .page
+            .event_listener::<EventDownloadWillBegin>()
+            .await
+            .map_err(|e| anyhow!("订阅 downloadWillBegin 失败: {}", e))?;
+        let mut progress_stream = self
+            .page
+            .event_listener::<EventDownloadProgress>()
+            .await
+            .map_err(|e| anyhow!("订阅 downloadProgress 失败: {}", e))?;
+
+        // 先记录下载开始的文件名（按 guid 关联）
+        let filenames: Arc<Mutex<std::collections::HashMap<String, String>>> =
+            Arc::new(Mutex::new(std::collections::HashMap::new()));
+        let filenames_begin = Arc::clone(&filenames);
+
+        let begin_task = tokio::spawn(async move {
+            while let Some(ev) = begin_stream.next().await {
+                filenames_begin
+                    .lock()
+                    .unwrap()
+                    .insert(ev.guid.clone(), ev.suggested_filename.clone());
+            }
+        });
+
+        // 等进度事件 state=Completed
+        let progress_task = tokio::spawn(async move {
+            while let Some(ev) = progress_stream.next().await {
+                if ev.state == DownloadProgressState::Completed {
+                    let filename = filenames
+                        .lock()
+                        .unwrap()
+                        .get(&ev.guid)
+                        .cloned()
+                        .unwrap_or_default();
+                    return Some(DownloadInfo {
+                        guid: ev.guid.clone(),
+                        filename,
+                        filepath: ev.file_path.clone(),
+                    });
+                }
+            }
+            None
+        });
+
+        let result = tokio::time::timeout(timeout, progress_task).await;
+        begin_task.abort();
+        match result {
+            Ok(Ok(Some(info))) => Ok(info),
+            Ok(Ok(None)) => Err(anyhow!("下载事件流关闭，未捕获到完成事件")),
+            Ok(Err(e)) => Err(anyhow!("wait_for_download 任务失败: {}", e)),
+            Err(_) => Err(anyhow!("wait_for_download 超时（{:?}）", timeout)),
+        }
+    }
+
     /// **Stealth Execution（隔离世界方案）**
     ///
     /// 通过 `Page.createIsolatedWorld` 创建隔离 JS 上下文执行脚本，**从不调用
@@ -582,6 +833,98 @@ impl ChaserPage {
             .await
             .map_err(|e| anyhow!("{}", e))?;
         Ok(res.result.result.value)
+    }
+
+    /// 在指定 frame（含 iframe）的隔离世界执行 JS（stealth-safe）。
+    ///
+    /// 与 `evaluate` 的区别：`evaluate` 只在主 frame 执行；本方法接受任意 FrameId，
+    /// 可在 `<iframe>` 内执行脚本——`evaluate` 无法穿透 iframe 文档边界。
+    /// 实现与 `evaluate_stealth` 同路：在目标 frame 上 `createIsolatedWorld` →
+    /// `Runtime.evaluate(context_id)`，从不调用 `Runtime.enable`。
+    ///
+    /// 用 `frames()` / `frame()` 拿到 FrameId 后传入。
+    pub async fn evaluate_in_frame(
+        &self,
+        frame_id: impl Into<String>,
+        script: &str,
+    ) -> Result<Option<Value>> {
+        use chromiumoxide_cdp::cdp::browser_protocol::page::FrameId;
+        let frame_id = FrameId::from(frame_id.into());
+        let isolated_world = self
+            .page
+            .execute(
+                CreateIsolatedWorldParams::builder()
+                    .frame_id(frame_id)
+                    .world_name("chaser-frame")
+                    .grant_univeral_access(true)
+                    .build()
+                    .unwrap(),
+            )
+            .await
+            .map_err(|e| anyhow!("createIsolatedWorld 失败: {}", e))?;
+        let ctx_id = isolated_world.result.execution_context_id;
+        let params = EvaluateParams::builder()
+            .expression(script)
+            .context_id(ctx_id)
+            .await_promise(true)
+            .return_by_value(true)
+            .build()
+            .unwrap();
+        let res = self
+            .page
+            .execute(params)
+            .await
+            .map_err(|e| anyhow!("frame evaluate 失败: {}", e))?;
+        Ok(res.result.result.value)
+    }
+
+    /// 列出页面所有 frame 的 ID（含主 frame 和所有 iframe）。
+    ///
+    /// 配合 [`evaluate_in_frame`] 或 [`frame`] 在 iframe 内执行操作。
+    /// 想知道每个 frame 是什么，用 `raw_page().frame_url(id)` 查 URL。
+    pub async fn frame_ids(&self) -> Result<Vec<String>> {
+        let ids = self.page.frames().await.map_err(|e| anyhow!("{}", e))?;
+        Ok(ids.into_iter().map(|id| id.into()).collect())
+    }
+
+    /// 按匹配条件找到第一个 iframe，返回 [`ZyFrame`] 句柄。
+    ///
+    /// `matcher` 是闭包，接收 (frame_url, frame_name)，返回 true 即匹配。
+    /// 常见用法：
+    /// ```rust,ignore
+    /// // 按 URL 子串匹配
+    /// let f = chaser.frame(|url, _| url.contains("recaptcha")).await?;
+    /// // 按 name 匹配
+    /// let f = chaser.frame(|_, name| name == "payment").await?;
+    /// ```
+    pub async fn frame<F>(&self, matcher: F) -> Result<Option<ZyFrame>>
+    where
+        F: Fn(&str, &str) -> bool,
+    {
+        let ids = self.page.frames().await.map_err(|e| anyhow!("{}", e))?;
+        for id in ids {
+            let url = self
+                .page
+                .frame_url(id.clone())
+                .await
+                .map_err(|e| anyhow!("{}", e))?
+                .unwrap_or_default();
+            let name = self
+                .page
+                .frame_name(id.clone())
+                .await
+                .map_err(|e| anyhow!("{}", e))?
+                .unwrap_or_default();
+            if matcher(&url, &name) {
+                return Ok(Some(ZyFrame {
+                    chaser: self.clone(),
+                    frame_id: id.into(),
+                    url,
+                    name,
+                }));
+            }
+        }
+        Ok(None)
     }
 
     /// Moves the mouse to the target coordinates using a human-like Bezier curve path.
@@ -1166,6 +1509,267 @@ impl ChaserPage {
         Ok(())
     }
 
+    // ========== 地理位置伪造 + 权限授予 ==========
+
+    /// 一站式启用地理位置伪造：设置坐标 + 授予 geolocation 权限。
+    ///
+    /// 单独 `emulate_geolocation` 不授予权限时，站点调 `getCurrentPosition` 会被拒。
+    /// 本方法组合坐标 override + 权限授予，让站点直接拿到伪造位置。
+    ///
+    /// # 示例
+    /// ```rust,ignore
+    /// chaser.enable_geolocation(37.7749, -122.4194).await?;  // 旧金山坐标
+    /// ```
+    pub async fn enable_geolocation(&self, latitude: f64, longitude: f64) -> Result<()> {
+        use chromiumoxide_cdp::cdp::browser_protocol::browser::{
+            PermissionDescriptor, PermissionSetting, SetPermissionParams,
+        };
+        use chromiumoxide_cdp::cdp::browser_protocol::emulation::SetGeolocationOverrideParams;
+
+        // 1. 授予 geolocation 权限（Browser 域）
+        self.page
+            .execute(
+                SetPermissionParams::builder()
+                    .permission(
+                        PermissionDescriptor::builder()
+                            .name("geolocation")
+                            .build()
+                            .unwrap(),
+                    )
+                    .setting(PermissionSetting::Granted)
+                    .build()
+                    .unwrap(),
+            )
+            .await
+            .map_err(|e| anyhow!("setPermission 失败: {}", e))?;
+
+        // 2. 设置坐标 override（Emulation 域）
+        self.page
+            .execute(
+                SetGeolocationOverrideParams::builder()
+                    .latitude(latitude)
+                    .longitude(longitude)
+                    .build(),
+            )
+            .await
+            .map_err(|e| anyhow!("setGeolocationOverride 失败: {}", e))?;
+        Ok(())
+    }
+
+    /// 批量授予站点权限，避免首次访问弹权限框导致卡住。
+    ///
+    /// 常用值：`"geolocation"`、`"clipboard-read"`、`"clipboard-write"`、
+    /// `"notifications"`、`"camera"`、`"microphone"`。
+    pub async fn grant_permissions(&self, permissions: &[&str]) -> Result<()> {
+        use chromiumoxide_cdp::cdp::browser_protocol::browser::{
+            PermissionDescriptor, PermissionSetting, SetPermissionParams,
+        };
+
+        for &perm in permissions {
+            self.page
+                .execute(
+                    SetPermissionParams::builder()
+                        .permission(PermissionDescriptor::builder().name(perm).build().unwrap())
+                        .setting(PermissionSetting::Granted)
+                        .build()
+                        .unwrap(),
+                )
+                .await
+                .map_err(|e| anyhow!("grant {} 失败: {}", perm, e))?;
+        }
+        Ok(())
+    }
+
+    // ========== 键盘组合键 + 鼠标右键/双击 ==========
+
+    /// 按下修饰键 + 普通键的组合（如 Ctrl+A、Shift+Tab、Ctrl+Enter）。
+    ///
+    /// `modifiers` 先按下，`key` 最后按，全部释放。修饰键：Control/Shift/Alt/Meta。
+    ///
+    /// # 示例
+    /// ```rust,ignore
+    /// chaser.press_key_combo(&["Control"], "a").await?;  // 全选
+    /// chaser.press_key_combo(&["Control", "Shift"], "Tab").await?;  // 反向切焦点
+    /// ```
+    pub async fn press_key_combo(&self, modifiers: &[&str], key: &str) -> Result<()> {
+        // 先按下所有修饰键
+        for m in modifiers {
+            self.hold_key(m).await?;
+        }
+        // 按目标键
+        self.press_key(key).await?;
+        // 反序释放修饰键
+        for m in modifiers.iter().rev() {
+            self.release_key(m).await?;
+        }
+        Ok(())
+    }
+
+    /// 按住一个键不释放（配合 release_key 实现组合键）。stealth-safe（走 Input 域）。
+    async fn hold_key(&self, key: &str) -> Result<()> {
+        let (key_str, code) = match key {
+            "Control" => ("Control", "ControlLeft"),
+            "Shift" => ("Shift", "ShiftLeft"),
+            "Alt" => ("Alt", "AltLeft"),
+            "Meta" => ("Meta", "MetaLeft"),
+            _ => (key, key),
+        };
+        let key_down = DispatchKeyEventParams::builder()
+            .r#type(DispatchKeyEventType::RawKeyDown)
+            .key(key_str)
+            .code(code)
+            .build()
+            .unwrap();
+        self.page
+            .execute(key_down)
+            .await
+            .map_err(|e| anyhow!("{}", e))?;
+        Ok(())
+    }
+
+    /// 释放一个按住的键（配合 hold_key）。
+    pub async fn release_key(&self, key: &str) -> Result<()> {
+        let (key_str, code) = match key {
+            "Control" => ("Control", "ControlLeft"),
+            "Shift" => ("Shift", "ShiftLeft"),
+            "Alt" => ("Alt", "AltLeft"),
+            "Meta" => ("Meta", "MetaLeft"),
+            _ => (key, key),
+        };
+        let key_up = DispatchKeyEventParams::builder()
+            .r#type(DispatchKeyEventType::KeyUp)
+            .key(key_str)
+            .code(code)
+            .build()
+            .unwrap();
+        self.page
+            .execute(key_up)
+            .await
+            .map_err(|e| anyhow!("{}", e))?;
+        Ok(())
+    }
+
+    /// 在指定坐标右键点击（contextmenu）。
+    pub async fn right_click(&self, x: f64, y: f64) -> Result<()> {
+        use chromiumoxide_cdp::cdp::browser_protocol::input::{
+            DispatchMouseEventParams, DispatchMouseEventType, MouseButton,
+        };
+        self.page
+            .execute(
+                DispatchMouseEventParams::builder()
+                    .r#type(DispatchMouseEventType::MousePressed)
+                    .x(x)
+                    .y(y)
+                    .button(MouseButton::Right)
+                    .click_count(1)
+                    .build()
+                    .unwrap(),
+            )
+            .await
+            .map_err(|e| anyhow!("{}", e))?;
+        self.page
+            .execute(
+                DispatchMouseEventParams::builder()
+                    .r#type(DispatchMouseEventType::MouseReleased)
+                    .x(x)
+                    .y(y)
+                    .button(MouseButton::Right)
+                    .click_count(1)
+                    .build()
+                    .unwrap(),
+            )
+            .await
+            .map_err(|e| anyhow!("{}", e))?;
+        Ok(())
+    }
+
+    /// 在指定坐标双击。
+    pub async fn double_click(&self, x: f64, y: f64) -> Result<()> {
+        use chromiumoxide_cdp::cdp::browser_protocol::input::{
+            DispatchMouseEventParams, DispatchMouseEventType, MouseButton,
+        };
+        for _ in 0..2 {
+            self.page
+                .execute(
+                    DispatchMouseEventParams::builder()
+                        .r#type(DispatchMouseEventType::MousePressed)
+                        .x(x)
+                        .y(y)
+                        .button(MouseButton::Left)
+                        .click_count(2)
+                        .build()
+                        .unwrap(),
+                )
+                .await
+                .map_err(|e| anyhow!("{}", e))?;
+            self.page
+                .execute(
+                    DispatchMouseEventParams::builder()
+                        .r#type(DispatchMouseEventType::MouseReleased)
+                        .x(x)
+                        .y(y)
+                        .button(MouseButton::Left)
+                        .click_count(2)
+                        .build()
+                        .unwrap(),
+                )
+                .await
+                .map_err(|e| anyhow!("{}", e))?;
+        }
+        Ok(())
+    }
+
+    // ========== 弹窗（popup）捕获 ==========
+
+    /// 阻塞等待由本页面打开的新窗口/popup 完成，返回新页面的 target_id。
+    ///
+    /// 底层 `Target.setAutoAttach` 已开启（zycdp 默认），子 target（新 tab、popup）
+    /// 会自动 attach。本方法订阅 `Target.attachedToTarget` 事件，按 openerId 过滤
+    /// 出"由当前页面打开的"新 target。
+    ///
+    /// 用返回的 target_id 调 `browser.get_page(target_id)` 拿到新 Page 句柄。
+    ///
+    /// # 示例
+    /// ```rust,ignore
+    /// // 先订阅，再点击触发 popup（避免时序）
+    /// let popup_task = tokio::spawn({
+    ///     let chaser = chaser.clone();
+    ///     async move { chaser.wait_for_popup(Duration::from_secs(10)).await }
+    /// });
+    /// chaser.click_by_text("在新窗口打开").await?;
+    /// let target_id = popup_task.await.unwrap()??.unwrap();
+    /// ```
+    pub async fn wait_for_popup(&self, timeout: std::time::Duration) -> Result<Option<String>> {
+        use chromiumoxide_cdp::cdp::browser_protocol::target::EventAttachedToTarget;
+        use futures::StreamExt;
+
+        let my_target: String = self.page.target_id().clone().into();
+        let mut stream = self
+            .page
+            .event_listener::<EventAttachedToTarget>()
+            .await
+            .map_err(|e| anyhow!("订阅 attachedToTarget 失败: {}", e))?;
+
+        loop {
+            match tokio::time::timeout(timeout, stream.next()).await {
+                Err(_) => return Ok(None),
+                Ok(None) => return Ok(None),
+                Ok(Some(ev)) => {
+                    // 过滤：openerId 等于当前页面 target_id 的才是本页打开的 popup
+                    let info = &ev.target_info;
+                    let opener_matches = info
+                        .opener_id
+                        .as_ref()
+                        .map(|s| -> String { s.clone().into() })
+                        == Some(my_target.clone());
+                    if opener_matches {
+                        return Ok(Some(info.target_id.clone().into()));
+                    }
+                }
+            }
+        }
+    }
+
     /// mimicking how real humans type.
     pub async fn type_text_with_typos(&self, text: &str) -> Result<()> {
         let mut rng = rand::thread_rng();
@@ -1226,6 +1830,101 @@ impl ChaserPage {
             .await
             .map_err(|e| anyhow!("{}", e))?;
         Ok(())
+    }
+}
+
+/// 下载完成信息（由 [`ChaserPage::wait_for_download`] 返回）。
+#[derive(Debug, Clone)]
+pub struct DownloadInfo {
+    /// 下载的全局唯一 guid。
+    pub guid: String,
+    /// 建议的文件名（来自 Content-Disposition）。
+    pub filename: String,
+    /// 落盘路径（平台相关，不保证已设置）。
+    pub filepath: Option<String>,
+}
+
+/// iframe 句柄，封装"在指定 iframe 内执行操作"的语义。
+///
+/// 通过 [`ChaserPage::frame`] 获取。所有方法都在该 iframe 的隔离世界执行
+/// （stealth-safe，不触发 `Runtime.enable`）。
+///
+/// # 示例
+/// ```rust,ignore
+/// // 找到 reCAPTCHA iframe 并在它里面执行 JS
+/// if let Some(f) = chaser.frame(|url, _| url.contains("recaptcha")).await? {
+///     let title = f.evaluate("document.title").await?;
+/// }
+/// ```
+#[derive(Debug, Clone)]
+pub struct ZyFrame {
+    chaser: ChaserPage,
+    frame_id: String,
+    url: String,
+    name: String,
+}
+
+impl ZyFrame {
+    /// 该 iframe 的 URL。
+    pub fn url(&self) -> &str {
+        &self.url
+    }
+
+    /// 该 iframe 的 name 属性。
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// 在该 iframe 的隔离世界执行 JS（stealth-safe）。
+    pub async fn evaluate(&self, script: &str) -> Result<Option<Value>> {
+        self.chaser.evaluate_in_frame(&self.frame_id, script).await
+    }
+
+    /// 在该 iframe 内按 CSS selector 点击元素（通过 JS dispatchEvent）。
+    ///
+    /// 走 JS 而非 DOM 域，因为 DOM 域的 querySelector 以主文档为根，无法穿透
+    /// iframe 边界；在 iframe 自己的隔离世界里跑 querySelector 才能找到 iframe
+    /// 内的元素。
+    pub async fn click_in(&self, selector: &str) -> Result<()> {
+        let sel = serde_json::to_string(selector).unwrap_or_else(|_| "''".into());
+        let script = format!(
+            r#"(function() {{
+                var el = document.querySelector({sel});
+                if (!el) return false;
+                el.click();
+                return true;
+            }})()"#,
+            sel = sel
+        );
+        let ok = self
+            .evaluate(&script)
+            .await
+            .map_err(|e| anyhow!("frame click_in 失败: {}", e))?
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        if !ok {
+            return Err(anyhow!(
+                "frame click_in: 在 iframe 内未找到 selector '{}'",
+                selector
+            ));
+        }
+        Ok(())
+    }
+
+    /// 在该 iframe 内按 CSS selector 读取元素的 innerText。
+    pub async fn text_in(&self, selector: &str) -> Result<Option<String>> {
+        let sel = serde_json::to_string(selector).unwrap_or_else(|_| "''".into());
+        let script = format!(
+            r#"(function() {{
+                var el = document.querySelector({sel});
+                return el ? el.innerText : null;
+            }})()"#,
+            sel = sel
+        );
+        self.evaluate(&script)
+            .await
+            .map_err(|e| anyhow!("frame text_in 失败: {}", e))
+            .map(|v| v.and_then(|x| x.as_str().map(|s| s.to_string())))
     }
 }
 

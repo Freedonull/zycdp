@@ -2,8 +2,8 @@
 // a problem with the iframe workaround is that it will always fail to load the page
 // and goto will cause a timeout.
 
-use zycdp::browser::{Browser, BrowserConfig};
 use futures::StreamExt;
+use zycdp::browser::{Browser, BrowserConfig};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

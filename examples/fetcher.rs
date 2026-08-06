@@ -1,8 +1,8 @@
 use std::path::Path;
 
+use futures::StreamExt;
 use zycdp::browser::{Browser, BrowserConfig};
 use zycdp::fetcher::{BrowserFetcher, BrowserFetcherOptions};
-use futures::StreamExt;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

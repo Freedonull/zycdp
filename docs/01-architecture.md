@@ -78,7 +78,11 @@ zycdp（主 crate，用户唯一接口）
 - **对网站隐身**：网站 JS 看不到注入的变量（独立 JS 上下文）
 - **对反爬隐身**：不触发 `Runtime.enable` 副作用
 
-> ⚠️ **已知差距**：README 声称 "100% rebrowser parity"，但实测 `evaluate_stealth` 跳过了 rebrowser 官方补丁的"主世界 binding 获取 context id"步骤。严格检测下可能暴露。详见 [05-defects-baseline.md](./05-defects-baseline.md)。
+> **与 rebrowser 的关系**：此方案等价于 rebrowser-patches 的 `alwaysIsolated` 模式
+> （在隔离世界执行 JS），**不是**其默认的 `addBinding` 模式（在主世界执行）。
+> 旧版注释曾写"100% rebrowser parity"，这是不准确的——两者是不同设计路线，
+> 各有取舍：隔离世界对网站隐身（变量不可见），主世界可访问页面闭包变量。
+> 详见 [05-defects-baseline.md D2](./05-defects-baseline.md#d2rebrowser-parity-有缺口-已重新定性)。
 
 ⚠️ **使用红线**：`raw_page().evaluate()` 会触发检测，必须用 `chaser.evaluate()`。
 

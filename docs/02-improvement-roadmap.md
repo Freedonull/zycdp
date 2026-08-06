@@ -9,17 +9,23 @@ zycdp 的核心价值在 **stealth 内核**（`Runtime.enable` 对抗、指纹�
 
 ## P0 - 最高优先级（直接影响 stealth 效果，必须做）
 
-### P0-1：补全 rebrowser parity 的缺失步骤
+### P0-1：补全 rebrowser parity 的缺失步骤（已重新定性为文档修正）
 
-- **问题**：`evaluate_stealth`（`src/chaser.rs:435`）直接用 `createIsolatedWorld` 返回的 context id，跳过了 rebrowser 官方补丁的"主世界 binding 获取 context"步骤。README 声称 "100% parity" 但实测有差距。
-- **为什么重要**：cf 高级检测针对 isolated world 探测，这一步差距在严格检测下会暴露。
-- **方案**：参考 [rebrowser-patches 官方实现](https://github.com/rebrowser/rebrowser-patches)：
-  1. 在主世界创建一次性 binding
-  2. 调用 binding 拿到主世界 context id
-  3. `createIsolatedWorld` 拿到隔离 context id
-  4. 后续 evaluate 走隔离 context
-- **验收**：通过 `tests/stealth/rebrowser.rs` 的 `mainWorldExecution` 测试项（当前可能 fail）。
-- **涉及文件**：`src/chaser.rs`、可能新增 `src/handler/` 辅助逻辑。
+> ⚠️ **原方案已证伪**。经对照 rebrowser-patches 官方源码（patches/*.patch），
+> 原描述基于误读：rebrowser 有 addBinding（默认，主世界执行）/ alwaysIsolated
+> （隔离世界执行）/ enableDisable 三种模式。zycdp 的 `evaluate_stealth` 走
+> `createIsolatedWorld`，**等价于 alwaysIsolated 模式**，是合法 stealth 路线，
+> 不是"跳过了 binding 步骤的残缺品"。
+>
+> 照原方案"补 binding 步骤"会把执行改到主世界，破坏隔离世界对网站的隐身性
+> （`evaluate_stealth` 核心价值之一）。且验收标准 `mainWorldExecution` 测试项
+> 在 `tests/stealth/rebrowser.rs` 中并不存在。
+>
+> **实际处理**：仅修正夸大注释（`evaluate_stealth` 上方 "100% parity" → 准确
+> 描述为 alwaysIsolated 等价方案）。执行模型不变。详见
+> [05-defects-baseline.md D2](./05-defects-baseline.md#d2rebrowser-parity-有缺口-已重新定性)。
+
+- **状态**：✅ 已完成（文档修正）
 
 ### P0-2：修复 Windows 内存探测假数据
 
@@ -78,8 +84,10 @@ zycdp 的核心价值在 **stealth 内核**（`Runtime.enable` 对抗、指纹�
 ### P2-1：代理认证支持
 
 - **问题**：`create_incognito_context_with_proxy`（`src/browser/mod.rs:481`）不支持 `user:pass@host:port`（Chrome 限制）。采集场景的代理大多需要认证。
-- **方案**：用 `Fetch.continueWithAuth` 封装代理认证响应（407 challenge）。
-- **验收**：带认证的 SOCKS5/HTTP 代理可直接用，无需本地转发器。
+- **方案**（分两类，因认证机制不同）：
+  - **HTTP 代理**：`Fetch.continueWithAuth` 响应 407 challenge。已实现为 `ChaserPage::enable_proxy_auth`。
+  - **SOCKS5 代理**：Chrome 网络栈不支持 SOCKS5 用户名/密码认证（架构性缺失，CDP/扩展触达不到 TCP 握手层）。实现为 `Socks5Bridge`（feature `socks5-bridge`）：本地起 HTTP CONNECT 转发器，代为完成 RFC 1929 认证握手，Chrome 连本地无认证端口。
+- **验收**：带认证的 HTTP/SOCKS5 代理可直接用。SOCKS5 已本机真实代理验证（经桥接访问到 ip-api.com）。
 - **涉及文件**：`src/browser/mod.rs` 或新增 `src/proxy.rs`。
 
 ### P2-2：Dialog / 文件上传 / Select 下拉补全
@@ -113,12 +121,14 @@ zycdp 的核心价值在 **stealth 内核**（`Runtime.enable` 对抗、指纹�
 
 | 项 | 状态 | commit | 完成日期 | 备注 |
 |---|---|---|---|---|
-| P0-1 rebrowser parity | ⬜ 待开始 | - | - | - |
-| P0-2 Windows 内存探测 | ⬜ 待开始 | - | - | - |
-| P0-3 离线回归测试 | ⬜ 待开始 | - | - | - |
-| P1-1 toString 对抗 | ⬜ 待开始 | - | - | - |
-| P1-2 类型名改名 | ⬜ 待开始 | - | - | - |
-| P1-3 Locator API | ⬜ 待开始 | - | - | - |
-| P2-1 代理认证 | ⬜ 待开始 | - | - | - |
-| P2-2 dialog/upload/select | ⬜ 待开始 | - | - | - |
+| P0-1 rebrowser parity | ✅ 已完成（重新定性为文档修正） | - | 2026-08-06 | 原方案证伪；改为修正夸大注释，执行模型不变 |
+| P0-2 Windows 内存探测 | ✅ 已完成 | - | 2026-08-06 | GlobalMemoryStatusEx via windows-sys 0.52 |
+| P0-3 离线回归测试 | ✅ 已完成（本机验证通过） | - | 2026-08-06 | tests/stealth/offline_assertions.rs，4 个测试 4 passed，覆盖指纹一致性/chrome对象/CDP标记清理/toString |
+| P1-1 toString 对抗 | ✅ 已完成 | - | 2026-08-06 | WeakMap + Function.prototype.toString 重写，注册被 patch 函数返回 [native code] |
+| P1-2 类型名改名 | ⬜ 待开始 | - | - | breaking change，建议 0.3.0 统一做 |
+| P1-3 Locator API | ✅ 已完成 | - | 2026-08-06 | wait_for_selector + find_by_text/click_by_text + ZyLocator 句柄；查询走 DOM 域 |
+| P2-1 代理认证 | ✅ 已完成（HTTP + SOCKS5） | - | 2026-08-06 | HTTP 代理：enable_proxy_auth（Fetch 响应 407）；SOCKS5 代理：Socks5Bridge（本地 HTTP CONNECT 转发器代做 RFC 1929 认证，feature `socks5-bridge`，真实代理验证通过） |
+| P2-2 dialog/upload/select | ✅ 已完成 | - | 2026-08-06 | on_dialog/auto_handle_dialogs（已验证）+ select_option + set_input_files |
 | P2-3 冲突隔离 | ⬜ 待开始 | - | - | - |
+| 额外：drag_human 仿真拖拽 | ✅ 已完成 | - | 2026-08-06 | 贝塞尔移动 + 按下/位移/释放 |
+| 额外：human_idle 仿真等待 | ✅ 已完成 | - | 2026-08-06 | 随机停顿，抗行为分析 |

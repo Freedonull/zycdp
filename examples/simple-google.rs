@@ -1,8 +1,8 @@
 use std::time::Duration;
 
+use futures::StreamExt;
 use zycdp::Browser;
 use zycdp::browser::BrowserConfigBuilder;
-use futures::StreamExt;
 
 #[tokio::main]
 async fn main() {

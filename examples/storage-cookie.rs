@@ -1,7 +1,7 @@
+use futures::StreamExt;
 use zycdp::browser::Browser;
 use zycdp::browser::BrowserConfig;
 use zycdp::cdp::browser_protocol::network::CookieParam;
-use futures::StreamExt;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

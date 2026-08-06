@@ -1,7 +1,7 @@
-use zycdp::browser::{Browser, BrowserConfig};
-use zycdp::page::ScreenshotParams;
 use chromiumoxide_cdp::cdp::browser_protocol::page::CaptureScreenshotFormat;
 use futures::StreamExt;
+use zycdp::browser::{Browser, BrowserConfig};
+use zycdp::page::ScreenshotParams;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

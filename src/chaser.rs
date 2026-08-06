@@ -21,12 +21,37 @@ use chromiumoxide_cdp::cdp::browser_protocol::page::{
 use chromiumoxide_cdp::cdp::js_protocol::runtime::EvaluateParams;
 use rand::Rng;
 use serde_json::Value;
+use std::future::Future;
 use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Point {
     pub x: f64,
     pub y: f64,
+}
+
+/// JavaScript 弹窗类型（alert / confirm / prompt / beforeunload）。
+///
+/// 在 [`ChaserPage::on_dialog`] 的回调里用于区分弹窗种类，决定如何处理。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DialogType {
+    Alert,
+    Confirm,
+    Prompt,
+    Beforeunload,
+}
+
+impl DialogType {
+    /// 从 CDP 的 DialogType 转换（内部使用）。
+    fn from_cdp(d: &chromiumoxide_cdp::cdp::browser_protocol::page::DialogType) -> Self {
+        use chromiumoxide_cdp::cdp::browser_protocol::page::DialogType as D;
+        match d {
+            D::Alert => DialogType::Alert,
+            D::Confirm => DialogType::Confirm,
+            D::Prompt => DialogType::Prompt,
+            D::Beforeunload => DialogType::Beforeunload,
+        }
+    }
 }
 
 /// Stealth browser page with human-like input simulation.
@@ -100,6 +125,85 @@ impl ChaserPage {
     /// Get the current page URL (stealth-safe).
     pub async fn url(&self) -> Result<Option<String>> {
         self.page.url().await.map_err(|e| anyhow!("{}", e))
+    }
+
+    // ========== LOCATOR（自动等待 + 抗 stale） ==========
+    //
+    // 与 `raw_page().find_element()` 的关键区别：find_element 找不到元素立刻报错，
+    // 异步加载的网页上用户被迫手写 sleep + 重试。Locator 层封装"轮询等待元素出现"。
+    //
+    // 查询走 DOM 域（QuerySelector / PerformSearch），不触发 Runtime.enable，
+    // 对 stealth 无影响——路线图里"必须用 isolated world 查询"是想当然，DOM 域查询
+    // 本身就不碰 Runtime domain。
+
+    /// 等待匹配 CSS selector 的第一个元素出现，最多等 `timeout`。
+    ///
+    /// 每 100ms 轮询一次 `querySelector`（DOM 域，stealth-safe），元素出现即返回。
+    /// 超时返回 Err。这是相比 `find_element` 的核心增强（后者无等待，元素未加载就 fail）。
+    ///
+    /// # 示例
+    /// ```rust,ignore
+    /// // 等待登录按钮出现（最多 10 秒）
+    /// let el = chaser.wait_for_selector("#login-btn", Duration::from_secs(10)).await?;
+    /// el.click().await?;
+    /// ```
+    pub async fn wait_for_selector(
+        &self,
+        selector: &str,
+        timeout: std::time::Duration,
+    ) -> Result<crate::element::Element> {
+        let interval = std::time::Duration::from_millis(100);
+        let start = std::time::Instant::now();
+        loop {
+            // find_element 内部走 DOM.querySelector，失败说明元素尚未存在
+            match self.page.find_element(selector).await {
+                Ok(el) => return Ok(el),
+                Err(_) => {
+                    if start.elapsed() >= timeout {
+                        return Err(anyhow!(
+                            "等待 selector '{}' 超时（{:?}）",
+                            selector,
+                            timeout
+                        ));
+                    }
+                    tokio::time::sleep(interval).await;
+                }
+            }
+        }
+    }
+
+    /// 按可见文本查找元素（XPath `//*[contains(text(), "...")]`），常用于爬虫定位
+    /// 没有 id/class 的按钮/链接。返回第一个匹配。
+    pub async fn find_by_text(&self, text: &str) -> Result<crate::element::Element> {
+        // 转义 XPath 字符串里的单引号：文本里的 ' 拆成 '+...'
+        let escaped = text.replace('\'', "',\"'\",'");
+        let xpath = format!("//*[contains(text(), '{}')]", escaped);
+        self.page
+            .find_xpath(xpath)
+            .await
+            .map_err(|e| anyhow!("{}", e))
+    }
+
+    /// 找到含指定文本的元素并点击（自动等待 + scroll into view）。
+    pub async fn click_by_text(&self, text: &str) -> Result<()> {
+        let el = self.find_by_text(text).await?;
+        el.click().await.map_err(|e| anyhow!("{}", e))?;
+        Ok(())
+    }
+
+    /// 创建一个 Locator 句柄，后续每次操作前重新查询元素（抗 stale element）。
+    ///
+    /// 适合"同一个元素要多次操作、中间页面可能重渲染"的场景：
+    /// ```rust,ignore
+    /// let btn = chaser.locator("#submit");
+    /// btn.click().await?;           // 第一次：等待+点击
+    /// btn.wait(Duration::from_secs(5)).await?;  // 重新等待它再次出现
+    /// ```
+    pub fn locator(&self, selector: impl Into<String>) -> ZyLocator {
+        ZyLocator {
+            chaser: self.clone(),
+            selector: selector.into(),
+        }
     }
 
     /// Execute JavaScript using **stealth execution** (no Runtime.enable leak).
@@ -423,15 +527,20 @@ impl ChaserPage {
         Ok(())
     }
 
-    /// **THE REBROWSER METHOD: Absolute Stealth Execution**
+    /// **Stealth Execution（隔离世界方案）**
     ///
-    /// This method achieves 100% stealth parity with Rebrowser by:
-    /// 1. Using `Page.createIsolatedWorld` to create a JS context
-    /// 2. Getting the `ExecutionContextId` directly from the response
-    /// 3. **Never calling `Runtime.enable`**
+    /// 通过 `Page.createIsolatedWorld` 创建隔离 JS 上下文执行脚本，**从不调用
+    /// `Runtime.enable`**——这是反爬用来识别 CDP 自动化的关键信号。
     ///
-    /// Site scripts cannot see your variables (isolated world).
-    /// Anti-bots cannot detect CDP activity (Runtime domain untouched).
+    /// 这等价于 rebrowser-patches 的 `alwaysIsolated` 模式（在隔离世界执行 JS），
+    /// 而非其默认的 `addBinding` 模式（拿主世界 context id 在主世界执行）。
+    /// 两者各有取舍：
+    /// - 本方案（隔离世界）：网站主世界看不到注入的变量，对网站隐身；
+    ///   但无法访问/修改主世界闭包内的变量。
+    /// - addBinding（主世界）：能操作主世界，但执行特征暴露在主世界。
+    ///
+    /// 因此此前注释里"100% stealth parity with Rebrowser"的说法不准确——本实现
+    /// 并非 rebrowser 默认模式的等价物。详见 docs/01-architecture.md 第五节。
     pub async fn evaluate_stealth(&self, script: &str) -> Result<Option<Value>> {
         // Get the main frame ID
         let frame_id = self
@@ -728,9 +837,335 @@ impl ChaserPage {
         Ok(())
     }
 
-    /// Type text with occasional typos and corrections for ultra-realistic input.
+    // ========== 人性化高级交互（select / upload / drag / idle） ==========
+
+    /// 仿真从 `<select>` 下拉框选择一个选项（按 value 或可见文本匹配）。
     ///
-    /// This method has a small chance (~3%) of making a typo and then correcting it,
+    /// 真实用户选下拉框的流程：点击展开 → 移动到目标项 → 点击。这里用 JS 在
+    /// 隔离世界设置 `select.value` 并派发 `change`/`input` 事件触发框架监听器，
+    /// 配合点击焦点仿真，行为覆盖绝大多数站点（含 React/Vue 等受控组件）。
+    ///
+    /// # 参数
+    /// - `selector`: select 元素的 CSS selector
+    /// - `value`: 要选中的 option 的 value 属性（精确匹配）
+    pub async fn select_option(&self, selector: &str, value: &str) -> Result<()> {
+        // 先点击 select 让它获焦（仿真真人交互，部分站点靠 focus 状态判定）
+        let el = self
+            .page
+            .find_element(selector)
+            .await
+            .map_err(|e| anyhow!("{}", e))?;
+        el.click().await.map_err(|e| anyhow!("{}", e))?;
+
+        // 在隔离世界设置 value 并触发事件链。注意脚本里不能用模板字面量 ${}
+        // （此处是直接通过 evaluate_stealth 发送，不嵌套，但为一致仍用拼接）。
+        let script = format!(
+            r#"(function() {{
+                var sel = document.querySelector({sel_q});
+                if (!sel) return false;
+                var ok = false;
+                for (var i = 0; i < sel.options.length; i++) {{
+                    if (sel.options[i].value === {val_q}) {{
+                        sel.value = {val_q};
+                        sel.selectedIndex = i;
+                        ok = true;
+                        break;
+                    }}
+                }}
+                if (ok) {{
+                    sel.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                    sel.dispatchEvent(new Event('change', {{ bubbles: true }}));
+                }}
+                return ok;
+            }})()"#,
+            // 将参数字符串 JSON.stringify 进去，安全转义引号/反斜杠
+            sel_q = serde_json::to_string(selector).unwrap_or_else(|_| "''".into()),
+            val_q = serde_json::to_string(value).unwrap_or_else(|_| "''".into()),
+        );
+        let ok = self
+            .evaluate(&script)
+            .await
+            .map_err(|e| anyhow!("select_option evaluate 失败: {}", e))?
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        if !ok {
+            return Err(anyhow!(
+                "select_option: 在 '{}' 中未找到 value='{}' 的 option",
+                selector,
+                value
+            ));
+        }
+        Ok(())
+    }
+
+    /// 仿真给 `<input type="file">` 设置文件（支持多文件）。
+    ///
+    /// 走 `DOM.setFileInputFiles`（DOM 域，stealth-safe，不触发 Runtime.enable）。
+    /// 文件路径必须是**浏览器所在机器的本机绝对路径**（CDP 直接读取，不经 JS）。
+    ///
+    /// # 参数
+    /// - `selector`: input[type=file] 的 CSS selector
+    /// - `file_paths`: 要上传的文件的绝对路径列表
+    pub async fn set_input_files(&self, selector: &str, file_paths: &[String]) -> Result<()> {
+        use chromiumoxide_cdp::cdp::browser_protocol::dom::SetFileInputFilesParams;
+
+        let el = self
+            .page
+            .find_element(selector)
+            .await
+            .map_err(|e| anyhow!("{}", e))?;
+        // input[type=file] 必须有 backend_node_id 才能设置文件
+        let backend = el.backend_node_id;
+        let cmd = SetFileInputFilesParams::builder()
+            .files(file_paths.to_vec())
+            .backend_node_id(backend)
+            .build()
+            .map_err(|e| anyhow!("{}", e))?;
+        self.page.execute(cmd).await.map_err(|e| anyhow!("{}", e))?;
+        Ok(())
+    }
+
+    /// 仿真拖拽：用贝塞尔曲线把鼠标从当前位置移到目标，按下→移动→释放。
+    ///
+    /// 适用于监听 mousedown/mousemove/mouseup 的拖拽（绝大多数滑块、可拖动元素）。
+    /// 对监听原生 HTML5 drag-and-drop 事件（dragstart/drop）的站点无效——那种需用
+    /// `Page.setInterceptDrags` + `Input.dispatchDragEvent`，本库暂未封装。
+    ///
+    /// # 参数
+    /// - `to_x`/`to_y`: 目标坐标（CSS 像素，相对主框架 viewport）
+    pub async fn drag_human(&self, to_x: f64, to_y: f64) -> Result<()> {
+        use chromiumoxide_cdp::cdp::browser_protocol::input::{
+            DispatchMouseEventParams, DispatchMouseEventType, MouseButton,
+        };
+
+        // 1. 用贝塞尔曲线仿真移动到目标（带抖动/过冲）
+        self.move_mouse_human(to_x, to_y).await?;
+
+        // 2. 按下鼠标左键
+        self.page
+            .execute(
+                DispatchMouseEventParams::builder()
+                    .r#type(DispatchMouseEventType::MousePressed)
+                    .x(to_x)
+                    .y(to_y)
+                    .button(MouseButton::Left)
+                    .click_count(1)
+                    .build()
+                    .unwrap(),
+            )
+            .await
+            .map_err(|e| anyhow!("{}", e))?;
+
+        // 3. 小幅停顿后缓慢移动一小段（仿真"按住拖动"）
+        let mut rng = rand::thread_rng();
+        tokio::time::sleep(tokio::time::Duration::from_millis(rng.gen_range(50..150))).await;
+        // 在目标附近做几次微小位移，触发 mousemove 监听器
+        let steps = rng.gen_range(3..7);
+        for i in 0..steps {
+            let jx = to_x + rng.gen_range(-3.0..3.0);
+            let jy = to_y + rng.gen_range(-3.0..3.0) + (i as f64) * 2.0;
+            self.page
+                .execute(
+                    DispatchMouseEventParams::builder()
+                        .r#type(DispatchMouseEventType::MouseMoved)
+                        .x(jx)
+                        .y(jy)
+                        .button(MouseButton::Left)
+                        .build()
+                        .unwrap(),
+                )
+                .await
+                .map_err(|e| anyhow!("{}", e))?;
+            tokio::time::sleep(tokio::time::Duration::from_millis(rng.gen_range(20..60))).await;
+        }
+
+        // 4. 释放鼠标（drop）
+        let end_x = to_x + rng.gen_range(2.0..6.0);
+        let end_y = to_y + rng.gen_range(2.0..6.0);
+        self.page
+            .execute(
+                DispatchMouseEventParams::builder()
+                    .r#type(DispatchMouseEventType::MouseReleased)
+                    .x(end_x)
+                    .y(end_y)
+                    .button(MouseButton::Left)
+                    .click_count(1)
+                    .build()
+                    .unwrap(),
+            )
+            .await
+            .map_err(|e| anyhow!("{}", e))?;
+
+        // 同步内部鼠标位置
+        *self.mouse_pos.lock().unwrap() = Point { x: end_x, y: end_y };
+        Ok(())
+    }
+
+    /// 仿真"无意图等待"——人类在页面上的自然停顿（看内容、思考）。
+    ///
+    /// 行为分析型反爬（DataDome/Akamai）会检测"操作间隔是否过于规律"。在自动化
+    /// 流程里穿插此方法，引入随机长度的人类式停顿，降低被判定为 bot 的概率。
+    ///
+    /// 默认随机 800ms~2.5s。可通过 `min_ms`/`max_ms` 自定义区间。
+    pub async fn human_idle(&self, min_ms: u64, max_ms: u64) -> Result<()> {
+        let mut rng = rand::thread_rng();
+        let (lo, hi) = if max_ms <= min_ms {
+            (min_ms, min_ms + 1)
+        } else {
+            (min_ms, max_ms)
+        };
+        let delay = rng.gen_range(lo..hi);
+        tokio::time::sleep(tokio::time::Duration::from_millis(delay)).await;
+        Ok(())
+    }
+
+    /// 仿真"无意图等待"的便捷形式：固定随机区间 800~2500ms。
+    pub async fn idle(&self) -> Result<()> {
+        self.human_idle(800, 2500).await
+    }
+
+    // ========== Dialog（alert/confirm/prompt/beforeunload）处理 ==========
+
+    /// 注册一个自动 dialog 处理器：每次页面弹出 alert/confirm/prompt/beforeunload
+    /// 对话框时，调用 `handler` 获取处理决策（accept 还是 dismiss、prompt 输入文本）。
+    ///
+    /// 不注册处理器时，弹出对话框会**阻塞页面执行**（headless 下无人能点），
+    /// 导致后续操作全部挂起——这是自动化里极常见的卡死原因。
+    ///
+    /// `handler` 接收 dialog 类型与消息文本，返回 `(accept, prompt_text)`：
+    /// - `accept=true` 接受对话框（confirm/prompt 点"确定"，alert 点"好"）
+    /// - `prompt_text` 仅 prompt 对话框生效，作为输入文本
+    ///
+    /// # 示例
+    /// ```rust,ignore
+    /// chaser.on_dialog(|dtype, msg| async move {
+    ///     println!("dialog: {:?} {}", dtype, msg);
+    ///     (true, None)  // 全部接受
+    /// }).await?;
+    /// ```
+    pub async fn on_dialog<F, Fut>(&self, handler: F) -> Result<()>
+    where
+        F: Fn(DialogType, String) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = (bool, Option<String>)> + Send + 'static,
+    {
+        use chromiumoxide_cdp::cdp::browser_protocol::page::{
+            EventJavascriptDialogOpening, HandleJavaScriptDialogParams,
+        };
+        use futures::StreamExt;
+
+        let mut stream = self
+            .page
+            .event_listener::<EventJavascriptDialogOpening>()
+            .await
+            .map_err(|e| anyhow!("订阅 dialog 事件失败: {}", e))?;
+        let page = self.page.clone();
+
+        tokio::spawn(async move {
+            while let Some(ev) = stream.next().await {
+                let dtype = DialogType::from_cdp(&ev.r#type);
+                let msg = ev.message.clone();
+                let (accept, prompt_text) = handler(dtype, msg).await;
+
+                let mut cmd = HandleJavaScriptDialogParams::builder().accept(accept);
+                if let Some(txt) = prompt_text {
+                    cmd = cmd.prompt_text(txt);
+                }
+                // 处理 dialog 失败只能记日志——回调里没法回传错误给调用方，
+                // 且 dialog 未处理会一直阻塞页面，尽力而为。
+                if let Err(e) = page.execute(cmd.build().unwrap()).await {
+                    tracing::warn!("handleJavaScriptDialog 失败: {}", e);
+                }
+            }
+        });
+        Ok(())
+    }
+
+    /// 简化的 dialog 处理：自动接受（accept=true）或自动忽略（accept=false）所有
+    /// 弹出的对话框，不做任何区分。适合"我只想让弹框别挡路"的场景。
+    ///
+    /// 等价于 `on_dialog(|_, _| async move { (accept, None) })`。
+    pub async fn auto_handle_dialogs(&self, accept: bool) -> Result<()> {
+        self.on_dialog(move |_dtype, _msg| async move { (accept, None) })
+            .await
+    }
+
+    // ========== 代理认证（Fetch.continueWithAuth） ==========
+
+    /// 注册代理 HTTP 认证凭据，自动响应所有 407 Proxy Authentication Required 挑战。
+    ///
+    /// Chrome 原生不支持 `user:pass@host:port` 形式的代理认证（这是 Chrome 的限制，
+    /// 非 zycdp 问题）。本方法通过 `Fetch` 域拦截认证请求并自动填入凭据，让带认证的
+    /// HTTP/SOCKS5 代理可直接使用，无需本地转发器。
+    ///
+    /// **必须在导航到目标站点前调用**（认证处理器需先就位）。调用时已自动开启
+    /// Fetch 域的 `handleAuthRequests`。
+    ///
+    /// # 示例
+    /// ```rust,ignore
+    /// let config = BrowserConfig::builder()
+    ///     .proxy_server("http://10.0.0.1:8080")  // 代理地址（不带认证）
+    ///     .build()?;
+    /// // ... launch, new_page, ChaserPage ...
+    /// chaser.enable_proxy_auth("user", "pass").await?;  // 注册认证
+    /// chaser.goto("https://example.com").await?;        // 之后正常导航
+    /// ```
+    pub async fn enable_proxy_auth(&self, username: &str, password: &str) -> Result<()> {
+        use chromiumoxide_cdp::cdp::browser_protocol::fetch::{
+            AuthChallengeResponse, AuthChallengeResponseResponse, AuthChallengeSource,
+            ContinueWithAuthParams, EventAuthRequired,
+        };
+        use futures::StreamExt;
+
+        // 开启 Fetch 域：拦截所有请求 + 要求处理认证。
+        // 注意 handle_auth_requests(true) 才会让 authRequired 事件发出来。
+        self.page
+            .execute(
+                FetchEnableParams::builder()
+                    .handle_auth_requests(true)
+                    .pattern(RequestPattern::builder().url_pattern("*").build())
+                    .build(),
+            )
+            .await
+            .map_err(|e| anyhow!("Fetch.enable 失败: {}", e))?;
+
+        let mut stream = self
+            .page
+            .event_listener::<EventAuthRequired>()
+            .await
+            .map_err(|e| anyhow!("订阅 authRequired 事件失败: {}", e))?;
+        let page = self.page.clone();
+        let user = username.to_string();
+        let pass = password.to_string();
+
+        tokio::spawn(async move {
+            while let Some(ev) = stream.next().await {
+                // 关键安全过滤：只响应代理认证（source == Proxy）。
+                // source == Server 是站点本身的 401 basic auth，此时绝不能把代理
+                // 用户名/密码当站点凭据发出去——既是凭据泄露，也会破坏站点登录。
+                // 对 Server 认证用 Default（交给浏览器默认行为，不提供凭据）。
+                let is_proxy = ev.auth_challenge.source == Some(AuthChallengeSource::Proxy);
+                let mut resp = AuthChallengeResponse::builder();
+                if is_proxy {
+                    resp = resp
+                        .response(AuthChallengeResponseResponse::ProvideCredentials)
+                        .username(user.clone())
+                        .password(pass.clone());
+                } else {
+                    resp = resp.response(AuthChallengeResponseResponse::Default);
+                }
+                let cmd = ContinueWithAuthParams::builder()
+                    .request_id(ev.request_id.clone())
+                    .auth_challenge_response(resp.build().unwrap())
+                    .build()
+                    .unwrap();
+                if let Err(e) = page.execute(cmd).await {
+                    tracing::warn!("Fetch.continueWithAuth 失败: {}", e);
+                }
+            }
+        });
+        Ok(())
+    }
+
     /// mimicking how real humans type.
     pub async fn type_text_with_typos(&self, text: &str) -> Result<()> {
         let mut rng = rand::thread_rng();
@@ -794,6 +1229,54 @@ impl ChaserPage {
     }
 }
 
+/// 轻量 Locator 句柄，封装"按 selector 反复查询元素"的语义。
+///
+/// 与直接 `wait_for_selector` 一次拿 Element 的区别：ZyLocator 每次调用 `click`/
+/// `wait`/`text` 时都重新查询，元素因页面重渲染变成 stale 后仍可继续使用。
+///
+/// # 示例
+/// ```rust,ignore
+/// let btn = chaser.locator("#submit");
+/// btn.click().await?;                       // 等待出现并点击（默认 30s 超时）
+/// let label = btn.text().await?;            // 重新查询并读取文本
+/// ```
+#[derive(Debug, Clone)]
+pub struct ZyLocator {
+    chaser: ChaserPage,
+    selector: String,
+}
+
+impl ZyLocator {
+    /// 默认等待超时。绝大多数页面元素应在 30 秒内出现。
+    const DEFAULT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
+    /// 等待元素出现，最多 `timeout`，返回 Element（每次调用都重新查询，抗 stale）。
+    pub async fn wait_with_timeout(
+        &self,
+        timeout: std::time::Duration,
+    ) -> Result<crate::element::Element> {
+        self.chaser.wait_for_selector(&self.selector, timeout).await
+    }
+
+    /// 用默认超时（30s）等待元素出现。
+    pub async fn wait(&self) -> Result<crate::element::Element> {
+        self.wait_with_timeout(Self::DEFAULT_TIMEOUT).await
+    }
+
+    /// 等待元素出现并点击。每次调用重新查询，页面重渲染后仍可用。
+    pub async fn click(&self) -> Result<()> {
+        let el = self.wait().await?;
+        el.click().await.map_err(|e| anyhow!("{}", e))?;
+        Ok(())
+    }
+
+    /// 等待元素出现并读取其 inner_text。
+    pub async fn text(&self) -> Result<Option<String>> {
+        let el = self.wait().await?;
+        el.inner_text().await.map_err(|e| anyhow!("{}", e))
+    }
+}
+
 #[derive(Debug)]
 pub struct BezierPath;
 
@@ -808,6 +1291,13 @@ impl BezierPath {
         // Calculate distance for offset scaling
         let dist = ((end.x - start.x).powi(2) + (end.y - start.y).powi(2)).sqrt();
         let offset_range = dist * 0.3;
+
+        // 零距离守卫：start == end 时 offset_range 为 0，后续 gen_range(-0.0..0.0)
+        // 会触发 rand 的 assert 而 panic。直接返回终点即可（无需移动）。
+        if offset_range == 0.0 {
+            path.push(end);
+            return path;
+        }
 
         // First control point (25% along the path with random offset)
         let p1 = Point {

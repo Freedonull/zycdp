@@ -1,9 +1,9 @@
 use std::time::Duration;
 
 use crate::test;
-use zycdp::Browser;
 use serde_json::Value;
 use tokio::time::sleep;
+use zycdp::Browser;
 
 #[tokio::test]
 #[ignore] // Bot tests are flaky but a good reference

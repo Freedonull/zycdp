@@ -1,7 +1,7 @@
-use zycdp::browser::{Browser, BrowserConfig};
-use zycdp::cdp::browser_protocol::page::NavigateParams;
 use futures::StreamExt;
 use futures::TryFutureExt;
+use zycdp::browser::{Browser, BrowserConfig};
+use zycdp::cdp::browser_protocol::page::NavigateParams;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

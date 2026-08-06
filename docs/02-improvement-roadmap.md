@@ -132,3 +132,27 @@ zycdp 的核心价值在 **stealth 内核**（`Runtime.enable` 对抗、指纹�
 | P2-3 冲突隔离 | ⬜ 待开始 | - | - | - |
 | 额外：drag_human 仿真拖拽 | ✅ 已完成 | - | 2026-08-06 | 贝塞尔移动 + 按下/位移/释放 |
 | 额外：human_idle 仿真等待 | ✅ 已完成 | - | 2026-08-06 | 随机停顿，抗行为分析 |
+
+## 下一批（基于 2025-2026 检测向量 + 自动化能力缺口调研）
+
+| 项 | 状态 | 完成日期 | 备注 |
+|---|---|---|---|
+| WebRTC IP 泄漏修复 | ✅ 已完成 | 2026-08-06 | DEFAULT_ARGS 加 force-webrtc-ip-handling-policy=disable_non_proxied_udp + enforce-webrtc-ip-permission-check |
+| iframe 内操作（ZyFrame） | ✅ 已完成 | 2026-08-06 | evaluate_in_frame（frame 上 createIsolatedWorld，stealth-safe）+ frame()/frame_ids() + ZyFrame 句柄（evaluate/click_in/text_in） |
+| 网络响应体拦截 | ✅ 已完成 | 2026-08-06 | wait_for_response（Network.getResponseBody，订阅 responseReceived+loadingFinished） |
+| 文件下载 | ✅ 已完成 | 2026-08-06 | enable_downloads + wait_for_download（Browser.setDownloadBehavior + 下载事件，DownloadInfo） |
+| AudioContext 指纹对抗 | ✅ 已完成 | 2026-08-06 | getFloatFrequencyData/getChannelData 确定性噪声（mulberry32 种子） |
+| 页面生命周期等待 networkidle | ✅ 已完成 | 2026-08-06 | wait_for_load_state(LoadState) + LoadState 枚举 |
+| TLS/H2 指纹红线 | ✅ 已完成 | 2026-08-06 | AGENTS.md 红线第 6 条：永不把请求路由到 Rust HTTP 客户端 |
+| Canvas 2D 指纹噪声 | ✅ 已完成 | 2026-08-06 | toDataURL 确定性像素噪声（±1） |
+| geolocation + permissions | ✅ 已完成 | 2026-08-06 | enable_geolocation(lat,lng)（坐标+权限一站式）+ grant_permissions |
+| 多 tab/popup 捕获 | ✅ 已完成 | 2026-08-06 | wait_for_popup（订阅 attachedToTarget，按 openerId 过滤） |
+| navigator.connection 伪造 | ✅ 已完成 | 2026-08-06 | 注入合理 effectiveType/rtt/downlink |
+| 键盘组合键 + 右键/双击 | ✅ 已完成 | 2026-08-06 | press_key_combo + hold_key/release_key + right_click + double_click |
+| speechSynthesis voices 伪造 | ✅ 已完成 | 2026-08-06 | 伪造 Windows voices 列表，避免空数组 headless 信号 |
+
+### 调研结论（归档）
+
+- **P3-2 CDP 自动跟进流水线**：❌ 降级为季度人工同步。CDP 与上游逐字节一致、半年才更新、stealth 同步不能自动化。
+- **chrome 对象补全**：❌ 无需做。主路径 profiles.rs 已完整注入 csi/loadTimes/app。
+- **TLS/JA4 + HTTP/2 指纹**：CDP 走原生网络栈天然匹配，**但绝不能引入 HTTP 拦截转发**（架构红线，已写入 AGENTS.md）。

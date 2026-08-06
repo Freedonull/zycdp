@@ -58,6 +58,7 @@ cargo run --example profile_demo
 3. **`src/handler/frame.rs` 中删除 `enable_runtime` 调用的地方**，不能被上游版本覆盖回去。
 4. **指纹一致性约束**：所有指纹值（UA、`navigator.platform`、WebGL vendor/renderer、`userAgentData`、硬件并发、deviceMemory）必须由同一 `Os` 枚举驱动，内部自洽。Windows UA 配 MacIntel platform 会被秒判。改 `ChaserProfile` 时保持这套一致性。
 5. **Native profile 零 JS 注入策略**（`src/profiles.rs`）：native 模式 bootstrap 为空字符串，UA/平台全用浏览器真实值，仅替换 `HeadlessChrome` → `Chrome`。真实属性比 JS 伪造更难检测，别无端往 native 模式加 JS patch。
+6. **永不把请求路由到 Rust HTTP 客户端**（TLS/H2 指纹红线）：zycdp 相对 requests/httpx 的核心护城河是 TLS(JA3/JA4) 和 HTTP/2 指纹天然匹配真实 Chrome——因为请求走 Chrome 原生 BoringSSL/网络栈。**任何"用 Fetch 拦截 + 自定义 HTTP 客户端转发"的架构都会立即破坏这个指纹**。`Socks5Bridge` 是例外（它在 TCP 层桥接，不替换网络栈）。未来新增网络相关功能时必须守住这条。
 
 > 代码里带 `// ZYCDP-STEALTH` / `// chaser-oxide Stealth` / "THE REBROWSER METHOD" 注释的区段是核心，动它们前先读 `docs/01` 对应章节。
 
@@ -114,9 +115,28 @@ cargo run --example profile_demo
 | `human_idle(min, max)` / `idle()` | 随机停顿，抗行为分析 | 纯等待 |
 | `move_mouse_human` / `click_human` / `scroll_human` / `type_text[_with_typos]` | 人类式鼠标/键盘/滚动 | Input |
 | `enable_request_interception` / `fulfill_request_html` / `continue_request` | 请求拦截 | Fetch |
+| `wait_for_response(url_pattern, timeout)` | 捕获响应 body（Network.getResponseBody） | Network 事件 |
+| `enable_downloads(dir)` / `wait_for_download(timeout)` | 文件下载 | Browser.setDownloadBehavior + 下载事件 |
 | `on_dialog(handler)` / `auto_handle_dialogs(accept)` | 自动处理 alert/confirm/prompt/beforeunload，不注册则弹框阻塞页面 | Page 事件 + handleJavaScriptDialog |
-| `enable_proxy_auth(user, pass)` | HTTP 代理认证（响应 407） | Fetch.continueWithAuth |
+| `enable_proxy_auth(user, pass)` | HTTP 代理认证（响应 407，已过滤 source==Proxy） | Fetch.continueWithAuth |
 | `Socks5Bridge::start(host,port,user,pass)` → `proxy_arg()` | **SOCKS5 带认证代理**桥接（feature `socks5-bridge`）。本地起 HTTP CONNECT 转发器代做 RFC 1929 认证 | tokio-socks + hyper |
+| `evaluate_in_frame(frame_id, script)` / `frame(matcher)` / `frame_ids()` / `ZyFrame` | iframe 内操作（在该 frame 上 createIsolatedWorld） | createIsolatedWorld |
+| `wait_for_load_state(LoadState, timeout)` | 等 networkidle/DOMContentLoaded/load | Page lifecycle 事件 |
+| `enable_geolocation(lat,lng)` / `grant_permissions(&[...])` | 地理位置伪造 + 权限授予 | Emulation + Browser.setPermission |
+| `wait_for_popup(timeout)` | 捕获本页打开的新窗口/popup | Target.attachedToTarget |
+| `press_key_combo(&[mods], key)` / `hold_key`/`release_key` / `right_click` / `double_click` | 键盘组合键 + 鼠标右键/双击 | Input |
+
+### bootstrap JS 注入的指纹对抗项（改 profiles.rs 必读）
+
+非 native 模式的 bootstrap（`ChaserProfile::bootstrap_script`）注入的对抗：
+- CDP 标记清理 / `Error.prepareStackTrace` / `Navigator.prototype` 指纹（platform/cores/memory/...）/ WebGL vendor/renderer / userAgentData / codecs / `navigator.webdriver` / `window.chrome` 全套（runtime/csi/loadTimes/app）/ `permissions.query` / `serviceWorker.register`
+- **AudioContext**：`getFloatFrequencyData`/`getChannelData` 确定性噪声（mulberry32 种子）
+- **Canvas 2D**：`toDataURL` 确定像素噪声（±1）
+- **navigator.connection**：伪造合理 effectiveType/rtt/downlink
+- **speechSynthesis**：伪造 Windows voices 列表（避免空数组 headless 信号）
+- **toString 深度对抗**：所有被 patch 函数注册到 WeakMap，`Function.prototype.toString` 返回 `[native code]`
+
+**新增 patch 时必须**：① 注册到 toString 对抗块（`maskAsNative`）；② 严禁用 ES 模板字面量（反引号+美元花括号），Worker 注入会把它嵌进反引号导致 ReferenceError。
 
 ### 代理认证的关键区分（改代理相关代码必读）
 

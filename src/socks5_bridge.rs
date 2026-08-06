@@ -192,7 +192,10 @@ async fn serve_loop(
 /// 处理一个 CONNECT 请求：连上游 SOCKS5（带认证）→ 回 200 → 双向转发。
 ///
 /// 无论上游连接成功还是失败都返回一个 Response（失败回 502），便于上层统一处理。
-async fn handle_connect(req: Request<Incoming>, upstream: &UpstreamConfig) -> Response<Empty<Bytes>> {
+async fn handle_connect(
+    req: Request<Incoming>,
+    upstream: &UpstreamConfig,
+) -> Response<Empty<Bytes>> {
     // CONNECT 的 authority 形如 "example.com:443"
     let host_port = match req.uri().authority().map(|a| a.as_str().to_string()) {
         Some(h) => h,
@@ -206,14 +209,13 @@ async fn handle_connect(req: Request<Incoming>, upstream: &UpstreamConfig) -> Re
 
     // 1. 连上游 SOCKS5 + 完成认证 + CONNECT 目标。
     //    关键：先握手成功再回 200，否则先回 200 后握手失败会让客户端无感知地挂死。
-    let upstream_stream =
-        tokio_socks::tcp::Socks5Stream::connect_with_password(
-            (upstream.host.as_str(), upstream.port),
-            host_port.as_str(),
-            upstream.username.as_str(),
-            upstream.password.as_str(),
-        )
-        .await;
+    let upstream_stream = tokio_socks::tcp::Socks5Stream::connect_with_password(
+        (upstream.host.as_str(), upstream.port),
+        host_port.as_str(),
+        upstream.username.as_str(),
+        upstream.password.as_str(),
+    )
+    .await;
 
     let upstream_tcp = match upstream_stream {
         Ok(s) => s.into_inner(),

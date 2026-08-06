@@ -158,14 +158,30 @@ impl ChaserPage {
         use futures::StreamExt;
 
         let target = state.as_str();
+        // 只匹配主 frame 的生命周期事件——iframe 的 networkIdle 可能先于主 frame 触发，
+        // 若不过滤会误判完成。mainframe() 返回主 frame id。
+        let main_frame = self
+            .page
+            .mainframe()
+            .await
+            .map_err(|e| anyhow!("获取主 frame 失败: {}", e))?
+            .map(|id| id.into());
         let mut stream = self
             .page
             .event_listener::<EventLifecycleEvent>()
             .await
             .map_err(|e| anyhow!("订阅 lifecycle 事件失败: {}", e))?;
 
+        // 用绝对截止时间，而非每次事件的 timeout——否则持续到来的非目标事件会
+        // 反复重置超时，导致永远不超时。
+        let deadline = tokio::time::Instant::now() + timeout;
         loop {
-            match tokio::time::timeout(timeout, stream.next()).await {
+            let remaining = deadline
+                .checked_duration_since(tokio::time::Instant::now())
+                .ok_or_else(|| {
+                    anyhow!("wait_for_load_state 超时（{:?}）等待 {}", timeout, target)
+                })?;
+            match tokio::time::timeout(remaining, stream.next()).await {
                 Err(_) => {
                     return Err(anyhow!(
                         "wait_for_load_state 超时（{:?}）等待 {}",
@@ -175,7 +191,10 @@ impl ChaserPage {
                 }
                 Ok(None) => return Err(anyhow!("lifecycle 事件流关闭")),
                 Ok(Some(ev)) => {
-                    if ev.name == target {
+                    // 只认主 frame 的事件；frame_id 为 None 时也接受（兼容性）
+                    let ev_frame: Option<String> = Some(ev.frame_id.clone().into());
+                    let is_main = ev_frame == main_frame || main_frame.is_none();
+                    if ev.name == target && is_main {
                         return Ok(());
                     }
                 }
@@ -652,10 +671,21 @@ impl ChaserPage {
                 let rid: String = ev.request_id.clone().into();
                 let is_matched = matched_ids.lock().unwrap().iter().any(|r| r == &rid);
                 if is_matched {
-                    // body 此时已就绪，读取返回
+                    // body 此时已就绪，读取返回。base64_encoded=true 时 body 是
+                    // base64 字符串（二进制/gzip 响应），需解码否则调用方拿到损坏数据。
                     let cmd = GetResponseBodyParams::new(ev.request_id.clone());
                     match page.execute(cmd).await {
-                        Ok(resp) => return Some(resp.result.body),
+                        Ok(resp) => {
+                            if resp.result.base64_encoded {
+                                // 解码 base64，损失地从字节转 String（二进制可能非 UTF-8，
+                                // 但本 API 语义是采集文本 body；纯二进制建议直接用 CDP）
+                                match STANDARD.decode(&resp.result.body) {
+                                    Ok(bytes) => return Some(String::from_utf8_lossy(&bytes).into_owned()),
+                                    Err(_) => return Some(resp.result.body),
+                                }
+                            }
+                            return Some(resp.result.body);
+                        }
                         Err(_) => continue,
                     }
                 }
@@ -902,7 +932,19 @@ impl ChaserPage {
         F: Fn(&str, &str) -> bool,
     {
         let ids = self.page.frames().await.map_err(|e| anyhow!("{}", e))?;
+        // 排除主 frame——用户调 frame() 是找 iframe，宽松匹配器（如 url.contains("api")）
+        // 会误匹配到主 frame（其 url 是页面 url）。要操作主 frame 用 evaluate() 即可。
+        let main_id: Option<String> = self
+            .page
+            .mainframe()
+            .await
+            .map_err(|e| anyhow!("{}", e))?
+            .map(|id| id.into());
         for id in ids {
+            let id_str: String = id.clone().into();
+            if Some(&id_str) == main_id.as_ref() {
+                continue; // 跳过主 frame
+            }
             let url = self
                 .page
                 .frame_url(id.clone())
@@ -1592,17 +1634,28 @@ impl ChaserPage {
     /// chaser.press_key_combo(&["Control", "Shift"], "Tab").await?;  // 反向切焦点
     /// ```
     pub async fn press_key_combo(&self, modifiers: &[&str], key: &str) -> Result<()> {
-        // 先按下所有修饰键
-        for m in modifiers {
-            self.hold_key(m).await?;
+        // 跟踪已按下的修饰键，任何步骤失败时尽力释放已按下的，避免键盘状态卡住
+        // （修饰键没释放会导致后续所有操作都带 Ctrl/Shift）。
+        let mut held_count = 0usize;
+        let result: Result<()> = async {
+            for m in modifiers {
+                self.hold_key(m).await?;
+                held_count += 1;
+            }
+            self.press_key(key).await?;
+            for m in modifiers.iter().rev() {
+                self.release_key(m).await?;
+            }
+            Ok(())
         }
-        // 按目标键
-        self.press_key(key).await?;
-        // 反序释放修饰键
-        for m in modifiers.iter().rev() {
-            self.release_key(m).await?;
+        .await;
+        if result.is_err() && held_count > 0 {
+            // 失败清理：反序释放已按下的修饰键，尽力而为
+            for m in modifiers[..held_count].iter().rev() {
+                let _ = self.release_key(m).await;
+            }
         }
-        Ok(())
+        result
     }
 
     /// 按住一个键不释放（配合 release_key 实现组合键）。stealth-safe（走 Input 域）。
@@ -1684,11 +1737,14 @@ impl ChaserPage {
     }
 
     /// 在指定坐标双击。
+    ///
+    /// 真实双击序列：pressed(1) released(1) pressed(2) released(2)，第二次按下
+    /// 的 click_count=2 触发浏览器的 dblclick 事件。
     pub async fn double_click(&self, x: f64, y: f64) -> Result<()> {
         use chromiumoxide_cdp::cdp::browser_protocol::input::{
             DispatchMouseEventParams, DispatchMouseEventType, MouseButton,
         };
-        for _ in 0..2 {
+        for count in 1..=2 {
             self.page
                 .execute(
                     DispatchMouseEventParams::builder()
@@ -1696,7 +1752,7 @@ impl ChaserPage {
                         .x(x)
                         .y(y)
                         .button(MouseButton::Left)
-                        .click_count(2)
+                        .click_count(count)
                         .build()
                         .unwrap(),
                 )
@@ -1709,7 +1765,7 @@ impl ChaserPage {
                         .x(x)
                         .y(y)
                         .button(MouseButton::Left)
-                        .click_count(2)
+                        .click_count(count)
                         .build()
                         .unwrap(),
                 )
@@ -1752,7 +1808,12 @@ impl ChaserPage {
 
         loop {
             match tokio::time::timeout(timeout, stream.next()).await {
-                Err(_) => return Ok(None),
+                Err(_) => {
+                    return Err(anyhow!(
+                        "wait_for_popup 超时（{:?}）未捕获到 popup",
+                        timeout
+                    ))
+                }
                 Ok(None) => return Ok(None),
                 Ok(Some(ev)) => {
                     // 过滤：openerId 等于当前页面 target_id 的才是本页打开的 popup

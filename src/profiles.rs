@@ -513,8 +513,11 @@ impl ChaserProfile {
                 // 严禁用 ES 模板字面量（反引号+美元花括号），下方 Worker 注入会把它
                 // 嵌进反引号模板，里面的插值会被 Worker 侧求值报 ReferenceError。
                 (function() {{
-                    // 固定种子：每次会话生成一次，之后所有采样用同一种子产生确定性噪声
-                    var seed = (Math.random() * 100000) | 0;
+                    // 确定性种子：基于 UA 字符串哈希（Rust 侧预算），保证同一会话内所有
+                    // 文档、跨导航噪声一致（避免 Castle 噪声检测：多次采样比对发现噪声
+                    // 每次变化）。不同 profile（不同 UA）种子不同，避免全网 stealth 库
+                    // 指纹相同。
+                    var seed = {audio_seed};
                     function noise(index) {{
                         // 简单确定性 PRNG（mulberry32 变体），种子固定则输出固定
                         var t = (seed + index * 2654435761) | 0;
@@ -553,7 +556,7 @@ impl ChaserProfile {
                 // 解法：对 toDataURL / getImageData 注入确定性噪声（同 AudioContext 的
                 // mulberry32 种子思路），噪声极小（单像素 ±1）不影响视觉但改变哈希。
                 (function() {{
-                    var seed = (Math.random() * 100000) | 0;
+                    var seed = {audio_seed};
                     function noise(i) {{
                         var t = (seed + i * 2654435761) | 0;
                         t = (t ^ (t >>> 15)) * (t | 1);
@@ -605,15 +608,16 @@ impl ChaserProfile {
                 // 返回空数组，是经典 headless 信号。
                 // 解法：伪造一个与 Windows UA 匹配的 voices 列表。
                 if (window.speechSynthesis) {{
+                    // 始终返回伪造的稳定 voices 列表（缓存引用，getVoices() === getVoices() 为 true）。
+                    // headless 环境真实 voices 可能延迟加载且为空，统一返回伪造列表更可靠，
+                    // 避免不同调用返回不同数组（空 vs fake vs real）被指纹识别。
                     var fakeVoices = [
                         {{name: 'Microsoft David Desktop - English (United States)', lang: 'en-US', localService: true, default: true, voiceURI: 'Microsoft David Desktop - English (United States)'}},
                         {{name: 'Microsoft Zira Desktop - English (United States)', lang: 'en-US', localService: true, default: false, voiceURI: 'Microsoft Zira Desktop - English (United States)'}},
                         {{name: 'Google US English', lang: 'en-US', localService: false, default: false, voiceURI: 'Google US English'}}
                     ];
-                    var origGetVoices = window.speechSynthesis.getVoices;
                     window.speechSynthesis.getVoices = function() {{
-                        var real = origGetVoices.apply(this, arguments);
-                        return real.length > 0 ? real : fakeVoices;
+                        return fakeVoices;
                     }};
                 }}
             }})();
@@ -624,6 +628,9 @@ impl ChaserProfile {
             device_memory = self.device_memory_value(),
             webgl_vendor = self.gpu.vendor(),
             webgl_renderer = self.gpu.renderer(),
+            // AudioContext/Canvas 噪声的确定性种子：基于 UA 的简单哈希（i32），
+            // 保证同 profile 跨文档/跨导航噪声一致（抗 Castle 噪声检测）。
+            audio_seed = self.user_agent().bytes().fold(0i32, |acc, b| acc.wrapping_mul(31).wrapping_add(b as i32)),
             locale = self.locale,
             ua_data_block = if self.native_ua_data {
                 String::new()

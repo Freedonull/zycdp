@@ -301,6 +301,38 @@ async fn cdp_markers_removed() -> anyhow::Result<()> {
 }
 
 #[tokio::test]
+async fn dialog_auto_handled() -> anyhow::Result<()> {
+    // 验证 auto_handle_dialogs 能自动接受 alert，页面不卡死。
+    // 不注册处理器时 alert 会阻塞页面 JS 执行，后续操作全部挂起。
+    let profile = ChaserProfile::windows().build();
+
+    with_stealth_profile(&profile, async |chaser| {
+        // 1. 注册自动接受所有 dialog
+        chaser.auto_handle_dialogs(true).await?;
+
+        // 2. 在主世界执行 alert —— 不注册处理器时这一步会永久阻塞。
+        //    用 call_js_fn（主世界），alert 弹出后由 spawn 的处理器接受，
+        //    函数才返回。
+        let body = chaser.raw_page().find_element("body").await.map_err(|e| anyhow::anyhow!(e))?;
+        let result = tokio::time::timeout(
+            std::time::Duration::from_secs(10),
+            body.call_js_fn("function() { alert('test-dialog'); return 'reached-after-alert'; }", false),
+        )
+        .await;
+        // call_js_fn 成功且没超时 = alert 被自动处理了
+        let resp = result.map_err(|_| anyhow::anyhow!("alert 阻塞超时——dialog 处理器未生效"))??;
+        let v = resp.result.value.ok_or_else(|| anyhow::anyhow!("返回 None"))?;
+        assert_eq!(
+            v, json!("reached-after-alert"),
+            "alert 应被处理、函数应继续执行到 return"
+        );
+
+        Ok(())
+    })
+    .await
+}
+
+#[tokio::test]
 async fn to_string_returns_native_code() -> anyhow::Result<()> {
     // P1-1 验证：被 patch 的函数 toString() 必须返回 [native code] 风格。
     let profile = ChaserProfile::windows().build();

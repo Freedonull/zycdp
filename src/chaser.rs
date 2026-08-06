@@ -21,12 +21,37 @@ use chromiumoxide_cdp::cdp::browser_protocol::page::{
 use chromiumoxide_cdp::cdp::js_protocol::runtime::EvaluateParams;
 use rand::Rng;
 use serde_json::Value;
+use std::future::Future;
 use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Point {
     pub x: f64,
     pub y: f64,
+}
+
+/// JavaScript 弹窗类型（alert / confirm / prompt / beforeunload）。
+///
+/// 在 [`ChaserPage::on_dialog`] 的回调里用于区分弹窗种类，决定如何处理。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DialogType {
+    Alert,
+    Confirm,
+    Prompt,
+    Beforeunload,
+}
+
+impl DialogType {
+    /// 从 CDP 的 DialogType 转换（内部使用）。
+    fn from_cdp(d: &chromiumoxide_cdp::cdp::browser_protocol::page::DialogType) -> Self {
+        use chromiumoxide_cdp::cdp::browser_protocol::page::DialogType as D;
+        match d {
+            D::Alert => DialogType::Alert,
+            D::Confirm => DialogType::Confirm,
+            D::Prompt => DialogType::Prompt,
+            D::Beforeunload => DialogType::Beforeunload,
+        }
+    }
 }
 
 /// Stealth browser page with human-like input simulation.
@@ -997,6 +1022,142 @@ impl ChaserPage {
     /// 仿真"无意图等待"的便捷形式：固定随机区间 800~2500ms。
     pub async fn idle(&self) -> Result<()> {
         self.human_idle(800, 2500).await
+    }
+
+    // ========== Dialog（alert/confirm/prompt/beforeunload）处理 ==========
+
+    /// 注册一个自动 dialog 处理器：每次页面弹出 alert/confirm/prompt/beforeunload
+    /// 对话框时，调用 `handler` 获取处理决策（accept 还是 dismiss、prompt 输入文本）。
+    ///
+    /// 不注册处理器时，弹出对话框会**阻塞页面执行**（headless 下无人能点），
+    /// 导致后续操作全部挂起——这是自动化里极常见的卡死原因。
+    ///
+    /// `handler` 接收 dialog 类型与消息文本，返回 `(accept, prompt_text)`：
+    /// - `accept=true` 接受对话框（confirm/prompt 点"确定"，alert 点"好"）
+    /// - `prompt_text` 仅 prompt 对话框生效，作为输入文本
+    ///
+    /// # 示例
+    /// ```rust,ignore
+    /// chaser.on_dialog(|dtype, msg| async move {
+    ///     println!("dialog: {:?} {}", dtype, msg);
+    ///     (true, None)  // 全部接受
+    /// }).await?;
+    /// ```
+    pub async fn on_dialog<F, Fut>(&self, handler: F) -> Result<()>
+    where
+        F: Fn(DialogType, String) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = (bool, Option<String>)> + Send + 'static,
+    {
+        use chromiumoxide_cdp::cdp::browser_protocol::page::{
+            EventJavascriptDialogOpening, HandleJavaScriptDialogParams,
+        };
+        use futures::StreamExt;
+
+        let mut stream = self
+            .page
+            .event_listener::<EventJavascriptDialogOpening>()
+            .await
+            .map_err(|e| anyhow!("订阅 dialog 事件失败: {}", e))?;
+        let page = self.page.clone();
+
+        tokio::spawn(async move {
+            while let Some(ev) = stream.next().await {
+                let dtype = DialogType::from_cdp(&ev.r#type);
+                let msg = ev.message.clone();
+                let (accept, prompt_text) = handler(dtype, msg).await;
+
+                let mut cmd = HandleJavaScriptDialogParams::builder().accept(accept);
+                if let Some(txt) = prompt_text {
+                    cmd = cmd.prompt_text(txt);
+                }
+                // 处理 dialog 失败只能记日志——回调里没法回传错误给调用方，
+                // 且 dialog 未处理会一直阻塞页面，尽力而为。
+                if let Err(e) = page.execute(cmd.build().unwrap()).await {
+                    tracing::warn!("handleJavaScriptDialog 失败: {}", e);
+                }
+            }
+        });
+        Ok(())
+    }
+
+    /// 简化的 dialog 处理：自动接受（accept=true）或自动忽略（accept=false）所有
+    /// 弹出的对话框，不做任何区分。适合"我只想让弹框别挡路"的场景。
+    ///
+    /// 等价于 `on_dialog(|_, _| async move { (accept, None) })`。
+    pub async fn auto_handle_dialogs(&self, accept: bool) -> Result<()> {
+        self.on_dialog(move |_dtype, _msg| async move { (accept, None) })
+            .await
+    }
+
+    // ========== 代理认证（Fetch.continueWithAuth） ==========
+
+    /// 注册代理 HTTP 认证凭据，自动响应所有 407 Proxy Authentication Required 挑战。
+    ///
+    /// Chrome 原生不支持 `user:pass@host:port` 形式的代理认证（这是 Chrome 的限制，
+    /// 非 zycdp 问题）。本方法通过 `Fetch` 域拦截认证请求并自动填入凭据，让带认证的
+    /// HTTP/SOCKS5 代理可直接使用，无需本地转发器。
+    ///
+    /// **必须在导航到目标站点前调用**（认证处理器需先就位）。调用时已自动开启
+    /// Fetch 域的 `handleAuthRequests`。
+    ///
+    /// # 示例
+    /// ```rust,ignore
+    /// let config = BrowserConfig::builder()
+    ///     .proxy_server("http://10.0.0.1:8080")  // 代理地址（不带认证）
+    ///     .build()?;
+    /// // ... launch, new_page, ChaserPage ...
+    /// chaser.enable_proxy_auth("user", "pass").await?;  // 注册认证
+    /// chaser.goto("https://example.com").await?;        // 之后正常导航
+    /// ```
+    pub async fn enable_proxy_auth(&self, username: &str, password: &str) -> Result<()> {
+        use chromiumoxide_cdp::cdp::browser_protocol::fetch::{
+            AuthChallengeResponse, AuthChallengeResponseResponse, ContinueWithAuthParams,
+            EventAuthRequired,
+        };
+        use futures::StreamExt;
+
+        // 开启 Fetch 域：拦截所有请求 + 要求处理认证。
+        // 注意 handle_auth_requests(true) 才会让 authRequired 事件发出来。
+        self.page
+            .execute(
+                FetchEnableParams::builder()
+                    .handle_auth_requests(true)
+                    .pattern(RequestPattern::builder().url_pattern("*").build())
+                    .build(),
+            )
+            .await
+            .map_err(|e| anyhow!("Fetch.enable 失败: {}", e))?;
+
+        let mut stream = self
+            .page
+            .event_listener::<EventAuthRequired>()
+            .await
+            .map_err(|e| anyhow!("订阅 authRequired 事件失败: {}", e))?;
+        let page = self.page.clone();
+        let user = username.to_string();
+        let pass = password.to_string();
+
+        tokio::spawn(async move {
+            while let Some(ev) = stream.next().await {
+                let req_id = ev.request_id.clone();
+                let cmd = ContinueWithAuthParams::builder()
+                    .request_id(req_id)
+                    .auth_challenge_response(
+                        AuthChallengeResponse::builder()
+                            .response(AuthChallengeResponseResponse::ProvideCredentials)
+                            .username(user.clone())
+                            .password(pass.clone())
+                            .build()
+                            .unwrap(),
+                    )
+                    .build()
+                    .unwrap();
+                if let Err(e) = page.execute(cmd).await {
+                    tracing::warn!("Fetch.continueWithAuth 失败: {}", e);
+                }
+            }
+        });
+        Ok(())
     }
 
     /// mimicking how real humans type.

@@ -639,3 +639,232 @@ async fn canvas_noise_deterministic() -> anyhow::Result<()> {
     })
     .await
 }
+
+#[tokio::test]
+async fn wait_for_response_captures_blob() -> anyhow::Result<()> {
+    // 验证 wait_for_response 能捕获响应 body。
+    // 用 blob URL 触发真实 Network.responseReceived 事件（不依赖外网）。
+    let profile = ChaserProfile::windows().build();
+    with_stealth_profile_nav(&profile, BLANK_PAGE, async |chaser| {
+        let chaser2 = chaser.clone();
+        // 先 spawn 等待任务（必须在 fetch 触发前订阅）
+        let wait_task = tokio::spawn(async move {
+            chaser2
+                .wait_for_response("blob:", std::time::Duration::from_secs(5))
+                .await
+        });
+
+        // 触发 blob fetch（响应体 = "response-body-text"）
+        // 注意 await_promise=true：fetch 是异步的，不 await 的话 Promise 可能被
+        // V8 回收导致请求根本不发出。await 让 call_js_fn 等 fetch 完成——期间
+        // spawn 的 wait_task 并发订阅事件流。
+        let body = chaser
+            .raw_page()
+            .find_element("body")
+            .await
+            .map_err(|e| anyhow::anyhow!(e))?;
+        body.call_js_fn(
+            "function() {\
+                var blob = new Blob(['response-body-text'], {type: 'text/plain'});\
+                var url = URL.createObjectURL(blob);\
+                return fetch(url).then(function(r){return r.text();});\
+            }",
+            true,
+        )
+        .await
+        .map_err(|e| anyhow::anyhow!("触发 fetch 失败: {e}"))?;
+
+        let resp_body = wait_task
+            .await
+            .map_err(|e| anyhow::anyhow!("task join 失败: {e}"))?
+            .map_err(|e| anyhow::anyhow!("wait_for_response 失败: {e}"))?;
+        assert!(
+            resp_body.contains("response-body-text"),
+            "wait_for_response 应捕获 blob 响应体，实际: {resp_body}"
+        );
+        Ok(())
+    })
+    .await
+}
+
+#[tokio::test]
+async fn networkidle_load_state() -> anyhow::Result<()> {
+    // 验证 wait_for_load_state 能等到 networkIdle（data URL 页面加载完会触发）。
+    let profile = ChaserProfile::windows().build();
+    with_stealth_profile_nav(&profile, BLANK_PAGE, async |chaser| {
+        // data URL 极简页，加载后很快进入 networkIdle
+        chaser
+            .wait_for_load_state(
+                zycdp::LoadState::NetworkIdle,
+                std::time::Duration::from_secs(10),
+            )
+            .await
+            .map_err(|e| anyhow::anyhow!("wait_for_load_state 失败: {e}"))?;
+        Ok(())
+    })
+    .await
+}
+
+#[tokio::test]
+async fn keyboard_combo_selects_all() -> anyhow::Result<()> {
+    // 验证 press_key_combo（Ctrl+A 全选）+ 右键 + 双击。
+    let profile = ChaserProfile::windows().build();
+    let page_url = "data:text/html,<!DOCTYPE html><html><body>\
+        <input id='i' value='hello' style='position:absolute;left:0;top:0;width:100px;height:30px;'>\
+        </body></html>";
+    with_stealth_profile_nav(&profile, page_url, async |chaser| {
+        // 聚焦 input 并选中所有文本（Ctrl+A）
+        let input = chaser
+            .raw_page()
+            .find_element("#i")
+            .await
+            .map_err(|e| anyhow::anyhow!("找不到 #i: {e}"))?;
+        // 显式 focus（click 在 headless 下可能不聚焦，用 JS focus 确保）
+        input
+            .call_js_fn("function() { this.focus(); this.setSelectionRange(0,0); return document.activeElement === this; }", false)
+            .await
+            .map_err(|e| anyhow::anyhow!("focus 失败: {e}"))?;
+        // Ctrl+A 全选
+        chaser
+            .press_key_combo(&["Control"], "a")
+            .await
+            .map_err(|e| anyhow::anyhow!("press_key_combo 失败: {e}"))?;
+
+        // 读 selection（主世界）：全选后 selectionStart=0, selectionEnd=5
+        let sel = input
+            .call_js_fn("function() { return JSON.stringify({s: this.selectionStart, e: this.selectionEnd}); }", false)
+            .await
+            .map_err(|e| anyhow::anyhow!("读 selection 失败: {e}"))?;
+        let s = sel.result.value.and_then(|v| v.as_str().map(|x| x.to_string()))
+            .ok_or_else(|| anyhow::anyhow!("selection 返回 None"))?;
+        let obj: serde_json::Value = serde_json::from_str(&s)
+            .map_err(|e| anyhow::anyhow!("解析 {e}: {s}"))?;
+        let start = obj["s"].as_i64().unwrap_or(-1);
+        let end = obj["e"].as_i64().unwrap_or(-1);
+        // Ctrl+A 全选：selectionStart=0, selectionEnd=5（'hello' 5 个字符）
+        assert_eq!(
+            (start, end),
+            (0, 5),
+            "Ctrl+A 应全选（start=0, end=5），实际 start={start} end={end}"
+        );
+
+        // 右键点击（不验证行为，只验证不 panic/不报错）
+        chaser
+            .right_click(50.0, 15.0)
+            .await
+            .map_err(|e| anyhow::anyhow!("right_click 失败: {e}"))?;
+
+        // 双击（选中一个词，验证不报错）
+        chaser
+            .double_click(50.0, 15.0)
+            .await
+            .map_err(|e| anyhow::anyhow!("double_click 失败: {e}"))?;
+        Ok(())
+    })
+    .await
+}
+
+#[tokio::test]
+async fn geolocation_override() -> anyhow::Result<()> {
+    // 验证 enable_geolocation 不报错（CDP 层 setPermission + setGeolocationOverride）。
+    // 注：Geolocation JS API 只在安全源（https）工作，data: URL 非安全源会报
+    // "Only secure origins are allowed"——这是浏览器限制非 zycdp bug。
+    // 此处只验证 enable_geolocation 的 CDP 调用链成功（不触发异常）。
+    let profile = ChaserProfile::windows().build();
+    with_stealth_profile_nav(&profile, BLANK_PAGE, async |chaser| {
+        chaser
+            .enable_geolocation(37.7749, -122.4194)
+            .await
+            .map_err(|e| anyhow::anyhow!("enable_geolocation 应成功: {e}"))?;
+        // grant_permissions 也不应报错
+        chaser
+            .grant_permissions(&["clipboard-read", "notifications"])
+            .await
+            .map_err(|e| anyhow::anyhow!("grant_permissions 应成功: {e}"))?;
+        Ok(())
+    })
+    .await
+}
+
+#[tokio::test]
+async fn webrtc_policy_applied() -> anyhow::Result<()> {
+    // 验证 WebRTC 防泄漏参数生效：RTCPeerConnection 可创建（参数不破坏功能）。
+    //
+    // 注：force-webrtc-ip-handling-policy=disable_non_proxied_udp 在**有代理**时
+    // 才完全阻止 host candidate 泄漏。无代理环境（本测试）下 host candidate 仍会出现
+    // （这是 WebRTC 设计——无代理时 ICE 走默认网络路径）。所以本测试只验证
+    // RTCPeerConnection 不因参数报错，host candidate 的完全阻止需配合代理测试。
+    let profile = ChaserProfile::windows().build();
+    with_stealth_profile_nav(&profile, BLANK_PAGE, async |chaser| {
+        let body = chaser
+            .raw_page()
+            .find_element("body")
+            .await
+            .map_err(|e| anyhow::anyhow!(e))?;
+        let v = body
+            .call_js_fn(
+                "function() {\
+                    return new Promise(function(resolve) {\
+                        try {\
+                            var pc = new RTCPeerConnection({iceServers: []});\
+                            pc.createDataChannel('test');\
+                            pc.createOffer().then(function(o){ return pc.setLocalDescription(o); });\
+                            setTimeout(function() { resolve('OK'); pc.close(); }, 1000);\
+                        } catch(e) { resolve('ERR:' + e.message); }\
+                    });\
+                }",
+                true,
+            )
+            .await
+            .map_err(|e| anyhow::anyhow!("WebRTC 测试失败: {e}"))?;
+        let s = v.result.value.and_then(|x| x.as_str().map(|x| x.to_string()))
+            .ok_or_else(|| anyhow::anyhow!("WebRTC 返回 None"))?;
+        assert!(
+            s == "OK" || s.starts_with("OK"),
+            "RTCPeerConnection 应能正常创建（WebRTC 参数不破坏功能），实际: {s}"
+        );
+        Ok(())
+    })
+    .await
+}
+
+#[tokio::test]
+async fn voices_not_empty() -> anyhow::Result<()> {
+    // 验证 speechSynthesis voices 伪造：不返回空数组（headless 信号）。
+    let profile = ChaserProfile::windows().build();
+    with_stealth_profile_nav(&profile, BLANK_PAGE, async |chaser| {
+        let body = chaser
+            .raw_page()
+            .find_element("body")
+            .await
+            .map_err(|e| anyhow::anyhow!(e))?;
+        let v = body
+            .call_js_fn(
+                "function() {\
+                    if (!window.speechSynthesis) return JSON.stringify({count: -1});\
+                    var voices = window.speechSynthesis.getVoices();\
+                    var stable = voices === window.speechSynthesis.getVoices();\
+                    return JSON.stringify({count: voices.length, stable: stable, first: voices.length > 0 ? voices[0].name : ''});\
+                }",
+                false,
+            )
+            .await
+            .map_err(|e| anyhow::anyhow!("voices 测试失败: {e}"))?;
+        let s = v.result.value.and_then(|x| x.as_str().map(|x| x.to_string()))
+            .ok_or_else(|| anyhow::anyhow!("voices 返回 None"))?;
+        let obj: serde_json::Value = serde_json::from_str(&s)
+            .map_err(|e| anyhow::anyhow!("解析 {e}: {s}"))?;
+        let count = obj["count"].as_i64().unwrap_or(-1);
+        assert!(
+            count > 0,
+            "speechSynthesis.getVoices() 不应为空（headless 信号），实际 count={count}"
+        );
+        assert_eq!(
+            obj["stable"].as_bool(),
+            Some(true),
+            "getVoices() 应返回稳定引用（两次调用 === 为 true）"
+        );
+        Ok(())
+    })
+    .await
+}

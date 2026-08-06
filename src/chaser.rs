@@ -1739,15 +1739,62 @@ impl ChaserPage {
     /// chaser.press_key_combo(&["Control", "Shift"], "Tab").await?;  // 反向切焦点
     /// ```
     pub async fn press_key_combo(&self, modifiers: &[&str], key: &str) -> Result<()> {
+        // CDP 的按键事件必须带 modifiers 位标志，浏览器才识别为组合键。
+        // 位值：Alt=1, Ctrl=2, Meta=4, Shift=8（CDP 文档）。
+        let modifier_bits: i64 = modifiers.iter().map(|m| match *m {
+            "Alt" => 1,
+            "Control" => 2,
+            "Meta" => 4,
+            "Shift" => 8,
+            _ => 0,
+        }).sum();
+
         // 跟踪已按下的修饰键，任何步骤失败时尽力释放已按下的，避免键盘状态卡住
         // （修饰键没释放会导致后续所有操作都带 Ctrl/Shift）。
         let mut held_count = 0usize;
         let result: Result<()> = async {
+            // 1. 按下所有修饰键（每个带自己的 modifiers 标志）
             for m in modifiers {
                 self.hold_key(m).await?;
                 held_count += 1;
             }
-            self.press_key(key).await?;
+            // 2. 按目标键（关键：必须用 KeyDefinition 的 virtual key code + modifiers
+            //    位标志，浏览器才识别为组合键快捷键。光有 key/code 字符串不够——
+            //    windows_virtual_key_code 是浏览器判断快捷键的依据）。
+            let key_definition = crate::keys::get_key_definition(key)
+                .ok_or_else(|| anyhow!("Key not found: {key}"))?;
+            let mut cmd = DispatchKeyEventParams::builder()
+                .key(key_definition.key)
+                .code(key_definition.code)
+                .windows_virtual_key_code(key_definition.key_code)
+                .native_virtual_key_code(key_definition.key_code)
+                .modifiers(modifier_bits);
+            // 单字符键带 text（产生输入），功能键用 RawKeyDown
+            if key_definition.key.len() == 1 {
+                cmd = cmd.text(key_definition.key);
+                cmd = cmd.r#type(DispatchKeyEventType::KeyDown);
+            } else {
+                cmd = cmd.r#type(DispatchKeyEventType::RawKeyDown);
+            }
+            self.page
+                .execute(cmd.build().unwrap())
+                .await
+                .map_err(|e| anyhow!("{}", e))?;
+            self.page
+                .execute(
+                    DispatchKeyEventParams::builder()
+                        .r#type(DispatchKeyEventType::KeyUp)
+                        .key(key_definition.key)
+                        .code(key_definition.code)
+                        .windows_virtual_key_code(key_definition.key_code)
+                        .native_virtual_key_code(key_definition.key_code)
+                        .modifiers(modifier_bits)
+                        .build()
+                        .unwrap(),
+                )
+                .await
+                .map_err(|e| anyhow!("{}", e))?;
+            // 3. 反序释放修饰键
             for m in modifiers.iter().rev() {
                 self.release_key(m).await?;
             }

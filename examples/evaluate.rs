@@ -1,8 +1,8 @@
-use zycdp::browser::{Browser, BrowserConfig};
 use chromiumoxide_cdp::cdp::js_protocol::runtime::{
     CallArgument, CallFunctionOnParams, EvaluateParams,
 };
 use futures::StreamExt;
+use zycdp::browser::{Browser, BrowserConfig};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

@@ -1,8 +1,8 @@
 use std::time::Duration;
 
-use zycdp::{BrowserConfig, Page};
 use serde::Deserialize;
 use tokio::time::sleep;
+use zycdp::{BrowserConfig, Page};
 
 use crate::test_config;
 

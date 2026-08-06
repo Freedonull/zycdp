@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
-use zycdp::browser::{Browser, BrowserConfig};
 use chromiumoxide_cdp::cdp::js_protocol::runtime::{AddBindingParams, EventBindingCalled};
 use futures::StreamExt;
 use tokio::sync::Mutex;
+use zycdp::browser::{Browser, BrowserConfig};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

@@ -4,6 +4,8 @@ use std::time::Duration;
 
 use base64::Engine;
 use base64::prelude::BASE64_STANDARD;
+use futures::{StreamExt, select};
+use tokio::time::sleep;
 use zycdp::Page;
 use zycdp::browser::{Browser, BrowserConfig};
 use zycdp::cdp::browser_protocol::fetch::{
@@ -12,8 +14,6 @@ use zycdp::cdp::browser_protocol::fetch::{
 use zycdp::cdp::browser_protocol::network::{
     self, ErrorReason, EventRequestWillBeSent, ResourceType,
 };
-use futures::{StreamExt, select};
-use tokio::time::sleep;
 
 const CONTENT: &str = "<html><head><meta http-equiv=\"refresh\" content=\"0;URL='http://www.example.com/'\" /></head><body><h1>TEST</h1></body></html>";
 const TARGET: &str = "http://google.com/";

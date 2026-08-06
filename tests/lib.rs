@@ -1,9 +1,9 @@
 use std::panic;
 use std::sync::OnceLock;
 
-use zycdp::{Browser, BrowserConfig};
 use futures::{FutureExt, StreamExt};
 use tokio::sync::Semaphore;
+use zycdp::{Browser, BrowserConfig};
 
 mod basic;
 mod config;
@@ -21,7 +21,10 @@ where
     T: for<'a> AsyncFnOnce(&'a mut Browser),
 {
     test_config(
-        BrowserConfig::builder().new_headless_mode().build().unwrap(),
+        BrowserConfig::builder()
+            .new_headless_mode()
+            .build()
+            .unwrap(),
         test,
     )
     .await;

@@ -2,8 +2,8 @@
 
 use std::time::Duration;
 
-use zycdp::{BrowserConfig, cdp::js_protocol::runtime::EventConsoleApiCalled};
 use futures::StreamExt;
+use zycdp::{BrowserConfig, cdp::js_protocol::runtime::EventConsoleApiCalled};
 
 const TARGET: &str = "https://www.microsoft.com/";
 

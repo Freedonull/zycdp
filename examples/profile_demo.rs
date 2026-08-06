@@ -4,9 +4,9 @@
 //! with the ergonomic builder pattern.
 
 use anyhow::Result;
-use zycdp::{Browser, BrowserConfig, ChaserPage, ChaserProfile, Gpu};
 use futures::StreamExt;
 use std::time::Duration;
+use zycdp::{Browser, BrowserConfig, ChaserPage, ChaserProfile, Gpu};
 
 #[tokio::main]
 async fn main() -> Result<()> {

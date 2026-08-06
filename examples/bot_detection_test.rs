@@ -1,8 +1,8 @@
 use anyhow::Result;
-use zycdp::{Browser, BrowserConfig, ChaserPage};
 use futures::StreamExt;
 use serde_json::Value;
 use std::time::Duration;
+use zycdp::{Browser, BrowserConfig, ChaserPage};
 
 #[tokio::main]
 async fn main() -> Result<()> {

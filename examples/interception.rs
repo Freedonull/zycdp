@@ -2,11 +2,11 @@ use std::sync::Arc;
 
 use base64::Engine;
 use base64::prelude::BASE64_STANDARD;
+use futures::StreamExt;
 use zycdp::browser::{Browser, BrowserConfig};
 use zycdp::cdp::browser_protocol::fetch::{
     ContinueRequestParams, EventRequestPaused, FulfillRequestParams,
 };
-use futures::StreamExt;
 
 const CONTENT: &str = "<html><head></head><body><h1>TEST</h1></body></html>";
 const TARGET: &str = "https://news.ycombinator.com/";

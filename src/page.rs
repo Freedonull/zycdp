@@ -547,6 +547,18 @@ impl Page {
         Element::new(Arc::clone(&self.inner), node_id).await
     }
 
+    /// 在指定的根节点（如 shadow root 的 nodeId）上执行 querySelector。
+    /// 供 shadow DOM 穿透查找使用——普通 find_element 以主文档为根，无法进入 shadow root。
+    #[doc(hidden)]
+    pub async fn find_element_in_root(
+        &self,
+        selector: impl Into<String>,
+        root: NodeId,
+    ) -> Result<Element> {
+        let node_id = self.inner.find_element(selector, root).await?;
+        Element::new(Arc::clone(&self.inner), node_id).await
+    }
+
     /// Return all `Element`s in the document that match the given selector
     pub async fn find_elements(&self, selector: impl Into<String>) -> Result<Vec<Element>> {
         let root = self.get_document().await?.node_id;

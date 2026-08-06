@@ -20,16 +20,20 @@
 - **影响**：native 模式核心承诺是"用真实值"，Windows 上内存恒为 8GB，与系统实际 RAM 不符。`navigator.deviceMemory` 被设成假的离散值，破坏 native 一致性。
 - **macOS/Linux 对比**：macOS 用 `sysctl hw.memsize`，Linux 读 `/proc/meminfo`，都是真实探测。只有 Windows 没做。
 - **修复**：见 [改进路线 P0-2](./02-improvement-roadmap.md#p0-2修复-windows-内存探测假数据)
-- **状态**：⬜ 待修复
+- **状态**：✅ 已修复（GlobalMemoryStatusEx via windows-sys 0.52，2026-08-06）
 
-### D2：rebrowser parity 有缺口 🔴
+### D2：rebrowser parity 有缺口 🔴（已重新定性）
 
-- **位置**：`src/chaser.rs:435`，`evaluate_stealth`
-- **现状**：README 和注释声称 "100% stealth parity with Rebrowser"，但实现跳过了 rebrowser 官方补丁的"主世界 binding 获取 context id"步骤，直接用 `createIsolatedWorld` 返回值。
-- **证据**：对比 [rebrowser-patches 官方实现](https://github.com/rebrowser/rebrowser-patches)，其第一步是"create a new binding in the main world, call it and save its context ID"。zycdp 没有这一步。
-- **影响**：在严格检测（如 cf 高级模式）下，isolated world 的执行特征可能与 rebrowser 标准实现不一致。
-- **修复**：见 [改进路线 P0-1](./02-improvement-roadmap.md#p0-1补全-rebrowser-parity-的缺失步骤)
-- **状态**：⬜ 待修复
+- **位置**：`src/chaser.rs`，`evaluate_stealth`
+- **原描述（已证伪）**：旧版文档称"跳过了 rebrowser 主世界 binding 获取 context id 步骤"，并据此计划在 P0-1 里"补全"该步骤。
+- **核实结果**：经对照 [rebrowser-patches 官方源码](https://github.com/rebrowser/rebrowser-patches) 的 patches/*.patch 文件，rebrowser 有三种模式：
+  - `addBinding`（默认）：在主世界执行 JS
+  - `alwaysIsolated`：在隔离世界执行 JS
+  - `enableDisable`：瞬间 enable/disable Runtime 抓 context
+  - zycdp 的 `evaluate_stealth` 走 `createIsolatedWorld`，**正好等价于 `alwaysIsolated` 模式**，是合法的 stealth 路线，不是"残缺的 addBinding"。
+- **真实问题**：仅是注释夸大——`evaluate_stealth` 上方注释曾写 "100% stealth parity with Rebrowser"，这是营销式表述，与实现不符（默认模式不同）。
+- **处理**：不"补全 binding 步骤"（那会把执行改到主世界，破坏对网站隐身性，参见 docs/01 第五节）。仅修正注释，准确描述为 alwaysIsolated 等价方案。
+- **状态**：✅ 已修正（注释改为准确表述，commit 见下方路线图进度表）
 
 ### D3：find_element 无自动等待
 
@@ -37,7 +41,7 @@
 - **现状**：直接调 `DOM.querySelector`，找不到立刻返回 Error，无重试/超时
 - **影响**：异步加载的网页上，用户被迫手写 sleep + 重试循环
 - **修复**：见 [改进路线 P1-3](./02-improvement-roadmap.md#p1-3补自动化易用性playwright-风格-api-薄层)
-- **状态**：⬜ 待修复
+- **状态**：✅ 已修复（ChaserPage::wait_for_selector + ZyLocator，2026-08-06）
 
 ### D4：代理认证不支持
 
@@ -64,10 +68,12 @@
 ### M2：文件上传缺失
 - 无 `set_input_files`，无法上传文件
 - 修复：见 P2-2
+- **状态**：✅ 已补（ChaserPage::set_input_files via DOM.setFileInputFiles，2026-08-06）
 
 ### M3：Select 下拉缺失
 - 无 `<select>` 操作封装
 - 修复：见 P2-2
+- **状态**：✅ 已补（ChaserPage::select_option，按 value 选择并触发 change/input，2026-08-06）
 
 ### M4：Frame 操作句柄缺失
 - `frames()`/`frame_url()` 只能只读查询，**没有 Frame 操作对象**，无法在 iframe 里点元素

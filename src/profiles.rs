@@ -566,18 +566,24 @@ impl ChaserProfile {
                     if (typeof HTMLCanvasElement !== 'undefined') {{
                         var origToDataURL = HTMLCanvasElement.prototype.toDataURL;
                         HTMLCanvasElement.prototype.toDataURL = function() {{
-                            var ctx = this.getContext('2d');
-                            if (ctx) {{
-                                try {{
-                                    var w = this.width, h = this.height;
-                                    var img = ctx.getImageData(0, 0, w, h);
-                                    for (var i = 0; i < img.data.length; i += 4) {{
-                                        img.data[i] = (img.data[i] + noise(i)) & 0xff;
-                                    }}
-                                    ctx.putImageData(img, 0, 0);
-                                }} catch (_) {{}}
+                            // 用临时 canvas 加噪，绝不修改原 canvas（否则多次调用会叠加噪声，
+                            // 导致 toDataURL() !== toDataURL()，被反爬噪声检测识破）。
+                            // CORS 污染的 canvas（getImageData 抛 SecurityError）回退到原方法。
+                            try {{
+                                var w = this.width, h = this.height;
+                                var tmp = document.createElement('canvas');
+                                tmp.width = w; tmp.height = h;
+                                var tctx = tmp.getContext('2d');
+                                tctx.drawImage(this, 0, 0);
+                                var img = tctx.getImageData(0, 0, w, h);
+                                for (var i = 0; i < img.data.length; i += 4) {{
+                                    img.data[i] = (img.data[i] + noise(i)) & 0xff;
+                                }}
+                                tctx.putImageData(img, 0, 0);
+                                return origToDataURL.apply(tmp, arguments);
+                            }} catch (_) {{
+                                return origToDataURL.apply(this, arguments);
                             }}
-                            return origToDataURL.apply(this, arguments);
                         }};
                     }}
                 }})();

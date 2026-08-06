@@ -399,3 +399,243 @@ async fn to_string_returns_native_code() -> anyhow::Result<()> {
     })
     .await
 }
+
+/// 与 with_stealth_profile 类似，但导航到自定义 data: URL（供需要特定 DOM 结构的
+/// 测试用，如 Shadow DOM / iframe）。bootstrap 仍正常注入。
+async fn with_stealth_profile_nav<F, Fut>(
+    profile: &ChaserProfile,
+    page_url: &str,
+    f: F,
+) -> anyhow::Result<()>
+where
+    F: FnOnce(ChaserPage) -> Fut,
+    Fut: std::future::Future<Output = anyhow::Result<()>>,
+{
+    let unique_dir = std::env::temp_dir().join(format!(
+        "zycdp-test-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let (browser, mut handler) = Browser::launch(
+        BrowserConfig::builder()
+            .new_headless_mode()
+            .user_data_dir(&unique_dir)
+            .build()
+            .map_err(|e| anyhow::anyhow!(e))?,
+    )
+    .await?;
+    tokio::spawn(async move { while handler.next().await.is_some() {} });
+    let page = browser.new_page("about:blank").await?;
+    let chaser = ChaserPage::new(page);
+    chaser.apply_profile(profile).await?;
+    chaser.goto(page_url).await?;
+    let result = f(chaser).await;
+    drop(browser);
+    let _ = std::fs::remove_dir_all(&unique_dir);
+    result
+}
+
+// 一个空 data 页，测试在其上动态构造 DOM
+const BLANK_PAGE: &str = "data:text/html,<!DOCTYPE html><html><body></body></html>";
+
+#[tokio::test]
+async fn shadow_dom_pierce_open() -> anyhow::Result<()> {
+    // 验证 find_in_shadow 能穿透 open shadow root 找到内部元素。
+    let profile = ChaserProfile::windows().build();
+    with_stealth_profile_nav(&profile, BLANK_PAGE, async |chaser| {
+        // 主世界动态创建 shadow host：div#host > shadowRoot > span#secret
+        let body = chaser.raw_page().find_element("body").await.map_err(|e| anyhow::anyhow!(e))?;
+        body.call_js_fn(
+            "function() {\
+                var host = document.createElement('div');\
+                host.id = 'widget';\
+                var shadow = host.attachShadow({mode: 'open'});\
+                var span = document.createElement('span');\
+                span.id = 'secret';\
+                span.textContent = 'hidden-text';\
+                shadow.appendChild(span);\
+                document.body.appendChild(host);\
+                return true;\
+            }",
+            false,
+        )
+        .await
+        .map_err(|e| anyhow::anyhow!("创建 shadow DOM 失败: {e}"))?;
+
+        // 用 find_in_shadow 穿透找到 #secret
+        let el = chaser
+            .find_in_shadow("#widget", "#secret")
+            .await
+            .map_err(|e| anyhow::anyhow!("find_in_shadow 失败: {e}"))?;
+        let text = el
+            .inner_text()
+            .await
+            .map_err(|e| anyhow::anyhow!("读 inner_text 失败: {e}"))?;
+        assert_eq!(
+            text.as_deref(),
+            Some("hidden-text"),
+            "shadow DOM 内 #secret 的文本应为 'hidden-text'"
+        );
+        Ok(())
+    })
+    .await
+}
+
+#[tokio::test]
+async fn shadow_dom_pierce_closed() -> anyhow::Result<()> {
+    // 验证 find_in_shadow 能穿透 closed shadow root（CDP 协议层无视 closed 封装）。
+    let profile = ChaserProfile::windows().build();
+    with_stealth_profile_nav(&profile, BLANK_PAGE, async |chaser| {
+        let body = chaser.raw_page().find_element("body").await.map_err(|e| anyhow::anyhow!(e))?;
+        body.call_js_fn(
+            "function() {\
+                var host = document.createElement('div');\
+                host.id = 'closed-widget';\
+                var shadow = host.attachShadow({mode: 'closed'});\
+                var span = document.createElement('span');\
+                span.id = 'closed-secret';\
+                span.textContent = 'closed-text';\
+                shadow.appendChild(span);\
+                document.body.appendChild(host);\
+                return host.shadowRoot;\
+            }",
+            false,
+        )
+        .await
+        .map_err(|e| anyhow::anyhow!("创建 closed shadow DOM 失败: {e}"))?;
+
+        // JS 层 host.shadowRoot 是 null（closed），但 CDP pierce 应能穿透
+        let el = chaser
+            .find_in_shadow("#closed-widget", "#closed-secret")
+            .await
+            .map_err(|e| anyhow::anyhow!("find_in_shadow closed 失败: {e}"))?;
+        let text = el
+            .inner_text()
+            .await
+            .map_err(|e| anyhow::anyhow!("读 inner_text 失败: {e}"))?;
+        assert_eq!(
+            text.as_deref(),
+            Some("closed-text"),
+            "closed shadow DOM 内元素应能被 CDP pierce 找到"
+        );
+        Ok(())
+    })
+    .await
+}
+
+#[tokio::test]
+async fn iframe_evaluate_in_frame() -> anyhow::Result<()> {
+    // 验证 evaluate_in_frame 能在 iframe 内执行 JS（stealth-safe 路径）。
+    let profile = ChaserProfile::windows().build();
+    let page_url = "data:text/html,<!DOCTYPE html><html><body>\
+        <iframe id=\"test-frame\" srcdoc=\"<html><body><div id='in-iframe'>iframe-content</div></body></html>\"></iframe>\
+        </body></html>";
+    with_stealth_profile_nav(&profile, page_url, async |chaser| {
+        // 等 iframe 加载（frame() 排除主 frame，匹配第一个 iframe）
+        let frame = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            chaser.frame(|_url, _name| true),
+        )
+        .await
+        .map_err(|_| anyhow::anyhow!("等 iframe 超时"))?
+        .map_err(|e| anyhow::anyhow!("frame() 失败: {e}"))?
+        .ok_or_else(|| anyhow::anyhow!("没找到 iframe"))?;
+
+        let v = frame
+            .evaluate("document.getElementById('in-iframe').textContent")
+            .await
+            .map_err(|e| anyhow::anyhow!("frame evaluate 失败: {e}"))?
+            .ok_or_else(|| anyhow::anyhow!("evaluate 返回 None"))?;
+        assert_eq!(v, json!("iframe-content"), "iframe 内文本应为 'iframe-content'");
+        Ok(())
+    })
+    .await
+}
+
+#[tokio::test]
+async fn audio_context_noise_deterministic() -> anyhow::Result<()> {
+    // 验证 AudioContext 对抗：两次 getFloatFrequencyData 结果相同（确定性噪声）。
+    let profile = ChaserProfile::windows().build();
+    with_stealth_profile_nav(&profile, BLANK_PAGE, async |chaser| {
+        let body = chaser.raw_page().find_element("body").await.map_err(|e| anyhow::anyhow!(e))?;
+        let v = body
+            .call_js_fn(
+                "function() {\
+                    try {\
+                        var ctx = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(1, 256, 44100);\
+                        var analyser = ctx.createAnalyser();\
+                        analyser.fftSize = 256;\
+                        var data1 = new Float32Array(analyser.frequencyBinCount);\
+                        analyser.getFloatFrequencyData(data1);\
+                        var data2 = new Float32Array(analyser.frequencyBinCount);\
+                        analyser.getFloatFrequencyData(data2);\
+                        var s1 = 0, s2 = 0;\
+                        for (var i = 0; i < data1.length; i++) {\
+                            s1 += Math.abs(data1[i]);\
+                            s2 += Math.abs(data2[i]);\
+                        }\
+                        return JSON.stringify({sum1: s1, sum2: s2});\
+                    } catch(e) { return 'ERR:' + e.message; }\
+                }",
+                false,
+            )
+            .await
+            .map_err(|e| anyhow::anyhow!("audio evaluate 失败: {e}"))?
+            .result
+            .value
+            .ok_or_else(|| anyhow::anyhow!("返回 None"))?;
+        let s = v.as_str().ok_or_else(|| anyhow::anyhow!("非字符串: {v}"))?;
+        let obj: serde_json::Value = serde_json::from_str(s)
+            .map_err(|e| anyhow::anyhow!("解析失败 {e}: {s}"))?;
+        let sum1 = obj["sum1"].as_f64().unwrap_or(0.0);
+        let sum2 = obj["sum2"].as_f64().unwrap_or(0.0);
+        assert!(
+            (sum1 - sum2).abs() < 1e-15,
+            "两次 getFloatFrequencyData 应一致（确定性噪声），sum1={sum1} sum2={sum2}"
+        );
+        Ok(())
+    })
+    .await
+}
+
+#[tokio::test]
+async fn canvas_noise_deterministic() -> anyhow::Result<()> {
+    // 验证 Canvas 2D 噪声：同一 canvas 两次 toDataURL 一致（确定性）。
+    let profile = ChaserProfile::windows().build();
+    with_stealth_profile_nav(&profile, BLANK_PAGE, async |chaser| {
+        let body = chaser.raw_page().find_element("body").await.map_err(|e| anyhow::anyhow!(e))?;
+        let v = body
+            .call_js_fn(
+                "function() {\
+                    try {\
+                        var c = document.createElement('canvas');\
+                        c.width = 8; c.height = 8;\
+                        var ctx = c.getContext('2d');\
+                        ctx.fillStyle = 'red';\
+                        ctx.fillRect(0, 0, 8, 8);\
+                        var url1 = c.toDataURL();\
+                        var url2 = c.toDataURL();\
+                        return JSON.stringify({equal: url1 === url2});\
+                    } catch(e) { return 'ERR:' + e.message; }\
+                }",
+                false,
+            )
+            .await
+            .map_err(|e| anyhow::anyhow!("canvas evaluate 失败: {e}"))?
+            .result
+            .value
+            .ok_or_else(|| anyhow::anyhow!("返回 None"))?;
+        let s = v.as_str().ok_or_else(|| anyhow::anyhow!("非字符串: {v}"))?;
+        let obj: serde_json::Value = serde_json::from_str(s)
+            .map_err(|e| anyhow::anyhow!("解析失败 {e}: {s}"))?;
+        assert_eq!(
+            obj["equal"].as_bool(),
+            Some(true),
+            "两次 toDataURL 应一致（确定性噪声）"
+        );
+        Ok(())
+    })
+    .await
+}

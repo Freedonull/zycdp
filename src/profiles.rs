@@ -553,6 +553,101 @@ impl ChaserProfile {
             },
         );
 
+        // 11. toString() 深度对抗（针对 CreepJS 级检测）
+        // 问题：上面 patch 的函数（getParameter / canPlayType / connect / query /
+        // register 等）被替换成 JS 函数后，其 toString() 不再返回
+        // `function name() { [native code] }`，反爬用 Function.prototype.toString
+        // 直接检查即可识别。
+        // 解法：维护一个 WeakMap，记录"被 patch 的函数 → 应伪装的原生 toString 字符串"，
+        // 重写 Function.prototype.toString，命中时返回伪造串，未命中走原生 toString。
+        // 同时 patch `toString` 本身的 toString，避免它自己暴露。
+        // 注意：本块严禁使用 ES 模板字面量（反引号 + ${}），因为下方 Worker 注入
+        // 会把整段 script 嵌进反引号模板 `${script}`，里面的 ${} 会被 Worker 侧
+        // 当成插值求值而报 ReferenceError，从而破坏所有 Worker。
+        script.push_str(
+            r#"
+            // === zycdp toString 深度对抗 ===
+            (function() {
+                var nativeToStringFn = Function.prototype.toString;
+                var NATIVE_BODY = '{ [native code] }';
+                // 存储被 patch 函数 -> 应返回的伪造 toString
+                var patched = new WeakMap();
+                // 把 fn 注册为"看起来是原生函数"。name 为应伪装的方法名。
+                function maskAsNative(fn, name) {
+                    if (typeof fn === 'function') {
+                        patched.set(fn, 'function ' + name + '() ' + NATIVE_BODY);
+                    }
+                    return fn;
+                }
+
+                // === 注册所有上面被 patch 的函数 ===
+                // Navigator.prototype getters（platform/hardwareConcurrency/deviceMemory/
+                // maxTouchPoints/language/languages/userAgentData/webdriver）
+                try {
+                    var navProto = Navigator.prototype;
+                    var navProps = ['platform','hardwareConcurrency','deviceMemory',
+                        'maxTouchPoints','language','languages','userAgentData','webdriver'];
+                    for (var i = 0; i < navProps.length; i++) {
+                        var d = Object.getOwnPropertyDescriptor(navProto, navProps[i]);
+                        if (d && typeof d.get === 'function') maskAsNative(d.get, 'get ' + navProps[i]);
+                    }
+                } catch (_) {}
+
+                // WebGL getParameter（WebGL / WebGL2 两套 prototype）
+                try {
+                    var Ctors = [];
+                    if (typeof WebGLRenderingContext !== 'undefined') Ctors.push(WebGLRenderingContext);
+                    if (typeof WebGL2RenderingContext !== 'undefined') Ctors.push(WebGL2RenderingContext);
+                    for (var i = 0; i < Ctors.length; i++) {
+                        maskAsNative(Ctors[i].prototype.getParameter, 'getParameter');
+                    }
+                } catch (_) {}
+
+                try { maskAsNative(HTMLMediaElement.prototype.canPlayType, 'canPlayType'); } catch (_) {}
+
+                try {
+                    if (window.navigator.permissions) {
+                        maskAsNative(window.navigator.permissions.__proto__.query, 'query');
+                    }
+                } catch (_) {}
+
+                try {
+                    if (navigator.serviceWorker) maskAsNative(navigator.serviceWorker.register, 'register');
+                } catch (_) {}
+
+                try {
+                    if (window.chrome) {
+                        var rt = window.chrome.runtime;
+                        if (rt) {
+                            maskAsNative(rt.connect, 'connect');
+                            maskAsNative(rt.sendMessage, 'sendMessage');
+                        }
+                        if (window.chrome.csi) maskAsNative(window.chrome.csi, 'csi');
+                        if (window.chrome.loadTimes) maskAsNative(window.chrome.loadTimes, 'loadTimes');
+                    }
+                } catch (_) {}
+
+                try {
+                    var uad = Navigator.prototype.userAgentData;
+                    if (uad && uad.__proto__ && typeof uad.__proto__.getHighEntropyValues === 'function') {
+                        maskAsNative(uad.__proto__.getHighEntropyValues, 'getHighEntropyValues');
+                    }
+                } catch (_) {}
+
+                // === 重写 Function.prototype.toString ===
+                var toStringProxy = function toString() {
+                    if (patched.has(this)) {
+                        return patched.get(this);
+                    }
+                    return nativeToStringFn.call(this);
+                };
+                // 让 toString 本身看起来也像原生（防 toString.toString() 检测）
+                patched.set(toStringProxy, 'function toString() ' + NATIVE_BODY);
+                Function.prototype.toString = toStringProxy;
+            })();
+"#,
+        );
+
         // Prevent CDP detection via worker threads
         let worker_script = format!(
             r#"
@@ -800,7 +895,31 @@ fn _read_system_memory_gb() -> u32 {
 
 #[cfg(not(any(target_os = "macos", target_os = "linux")))]
 fn _read_system_memory_gb() -> u32 {
-    8
+    // 通过 GlobalMemoryStatusEx 读取真实物理内存（此前硬编码返回 8，破坏
+    // native 模式一致性，见 docs/05-defects-baseline.md D1）。
+    use windows_sys::Win32::Foundation::BOOL;
+    use windows_sys::Win32::System::SystemInformation::{GlobalMemoryStatusEx, MEMORYSTATUSEX};
+
+    // dwLength 必须在调用前设为结构体大小，否则 GlobalMemoryStatusEx 会失败。
+    let mut status = MEMORYSTATUSEX {
+        dwLength: std::mem::size_of::<MEMORYSTATUSEX>() as u32,
+        dwMemoryLoad: 0,
+        ullTotalPhys: 0,
+        ullAvailPhys: 0,
+        ullTotalPageFile: 0,
+        ullAvailPageFile: 0,
+        ullTotalVirtual: 0,
+        ullAvailVirtual: 0,
+        ullAvailExtendedVirtual: 0,
+    };
+
+    // SAFETY: 传入本机结构体指针，dwLength 已正确设置。函数只写入 status，
+    // 不持有指针，无并发风险。
+    let ok: BOOL = unsafe { GlobalMemoryStatusEx(&mut status) };
+    if ok == 0 {
+        return 8; // 探测失败兜底（理论上几乎不会发生）
+    }
+    (status.ullTotalPhys / (1024 * 1024 * 1024)) as u32
 }
 
 // Re-export the old trait-based system for backwards compatibility

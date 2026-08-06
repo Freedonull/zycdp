@@ -45,6 +45,14 @@ anyhow = "1"
 
 [target.'cfg(windows)'.dependencies]
 windows-registry = "0.6"
+# 仅用于 Windows 真实物理内存探测（GlobalMemoryStatusEx）。
+# 选 0.52 是传递依赖里已存在的版本，避免引入新的 windows-sys 大版本。
+# `Win32_System_SystemInformation` 提供 GlobalMemoryStatusEx / MEMORYSTATUSEX，
+# `Win32_Foundation` 提供 BOOL。
+windows-sys = { version = "0.52", features = [
+  "Win32_System_SystemInformation",
+  "Win32_Foundation",
+] }
 
 [dev-dependencies]
 quote = "1"

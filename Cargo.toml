@@ -42,6 +42,13 @@ reqwest = { version = "0.13", default-features = false }
 dashmap = "6"
 rand = "0.8"
 anyhow = "1"
+# SOCKS5→HTTP 桥接（可选 feature `socks5-bridge`）。
+# 本地起一个 HTTP CONNECT 转发器，代为完成到上游 SOCKS5（带认证）的握手，
+# 让不支持 SOCKS5 认证的 Chrome 也能用带账号密码的 SOCKS5 代理。
+hyper = { version = "1", features = ["http1", "server"], optional = true }
+hyper-util = { version = "0.1", features = ["tokio"], optional = true }
+http-body-util = { version = "0.1", optional = true }
+tokio-socks = { version = "0.5", optional = true }
 
 [target.'cfg(windows)'.dependencies]
 windows-registry = "0.6"
@@ -65,6 +72,8 @@ tokio = { version = "1", features = ["rt-multi-thread", "time", "macros"] }
 default = ["bytes"]
 fetcher = ["chromiumoxide_fetcher"]
 bytes = ["dep:bytes"]
+# 启用 SOCKS5→HTTP 桥接（Socks5Bridge 组件）。
+socks5-bridge = ["dep:hyper", "dep:hyper-util", "dep:http-body-util", "dep:tokio-socks"]
 
 rustls = ["chromiumoxide_fetcher/rustls"]
 native-tls = ["chromiumoxide_fetcher/native-tls"]
@@ -75,6 +84,10 @@ zip8 = ["chromiumoxide_fetcher/zip8"]
 [[example]]
 name = "fetcher"
 required-features = ["fetcher", "zip8", "rustls"]
+
+[[example]]
+name = "socks5_bridge"
+required-features = ["socks5-bridge"]
 
 [[test]]
 name = "chromiumoxide_tests"

@@ -107,5 +107,11 @@ pub use crate::stealth::*;
 pub mod profiles;
 pub use crate::profiles::*;
 
+// SOCKS5→HTTP 桥接器（可选 feature `socks5-bridge`）。
+#[cfg(feature = "socks5-bridge")]
+pub mod socks5_bridge;
+#[cfg(feature = "socks5-bridge")]
+pub use crate::socks5_bridge::Socks5Bridge;
+
 // Re-export useful CDP types for request interception
 pub use chromiumoxide_cdp::cdp::browser_protocol::network::ResourceType;

@@ -221,6 +221,44 @@ let config = BrowserConfig::builder()
     .build()?;
 ```
 
+### Proxies
+
+Chrome doesn't natively support proxy authentication. zycdp provides two
+mechanisms depending on the proxy type:
+
+**HTTP proxies** (respond to 407 challenge) — use `enable_proxy_auth`:
+
+```rust
+let config = BrowserConfig::builder()
+    .arg("--proxy-server=http://proxy-host:8080")
+    .build()?;
+// ... launch, new_page, ChaserPage ...
+chaser.enable_proxy_auth("user", "pass").await?;  // before navigation
+```
+
+**SOCKS5 proxies with authentication** — Chrome's network stack doesn't support
+SOCKS5 username/password auth at all (not fixable via CDP or extensions). zycdp
+ships a `Socks5Bridge` (feature `socks5-bridge`) that runs a local HTTP CONNECT
+forwarder which performs the SOCKS5 auth handshake on Chrome's behalf:
+
+```toml
+zycdp = { version = "0.2", features = ["socks5-bridge"] }
+```
+
+```rust
+use zycdp::{Browser, BrowserConfig, Socks5Bridge};
+
+// 1. Start the bridge BEFORE launching Chrome (--proxy-server is a launch flag)
+let bridge = Socks5Bridge::start("proxy-host", 1080, "user", "pass").await?;
+
+// 2. Point Chrome at the local forwarder
+let config = BrowserConfig::builder()
+    .arg(bridge.proxy_arg())
+    .build()?;
+let (browser, mut handler) = Browser::launch(config).await?;
+// All traffic now flows through the authenticated SOCKS5 upstream.
+```
+
 ## Stealth Details
 
 ### What `apply_native_profile()` does

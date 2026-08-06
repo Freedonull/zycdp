@@ -115,7 +115,16 @@ cargo run --example profile_demo
 | `move_mouse_human` / `click_human` / `scroll_human` / `type_text[_with_typos]` | 人类式鼠标/键盘/滚动 | Input |
 | `enable_request_interception` / `fulfill_request_html` / `continue_request` | 请求拦截 | Fetch |
 | `on_dialog(handler)` / `auto_handle_dialogs(accept)` | 自动处理 alert/confirm/prompt/beforeunload，不注册则弹框阻塞页面 | Page 事件 + handleJavaScriptDialog |
-| `enable_proxy_auth(user, pass)` | 代理 HTTP 认证（响应 407），让 `user:pass@host:port` 代理可用 | Fetch.continueWithAuth |
+| `enable_proxy_auth(user, pass)` | HTTP 代理认证（响应 407） | Fetch.continueWithAuth |
+| `Socks5Bridge::start(host,port,user,pass)` → `proxy_arg()` | **SOCKS5 带认证代理**桥接（feature `socks5-bridge`）。本地起 HTTP CONNECT 转发器代做 RFC 1929 认证 | tokio-socks + hyper |
+
+### 代理认证的关键区分（改代理相关代码必读）
+
+Chrome/Chromium 网络栈**不支持 SOCKS5 用户名/密码认证**（架构性缺失，非 bug）。
+- **HTTP 代理**：407 challenge → CDP `Fetch.authRequired` 能拦 → `enable_proxy_auth` 有效
+- **SOCKS5 代理**：认证在 TCP 握手层，`Fetch`/扩展 `webRequest` 都触达不到 → 必须用 `Socks5Bridge`（浏览器进程外桥接，本地 HTTP CONNECT 转发器代做认证）
+
+`Socks5Bridge` 必须在 `Browser::launch` **之前**启动（`--proxy-server` 是启动参数）。每浏览器一个 bridge 实例（故障隔离最优；转发器开销 ~1-2MB，相对 Chrome 的 50-100MB 可忽略）。
 
 ## Bootstrap JS 的 toString 对抗约束
 

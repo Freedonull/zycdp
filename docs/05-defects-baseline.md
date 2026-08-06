@@ -49,7 +49,11 @@
 - **现状**：不支持 `user:pass@host:port`（Chrome 限制，非 zycdp bug），但 zycdp 也没有 `Fetch.continueWithAuth` 的封装
 - **影响**：带认证的代理需要外部转发器才能用
 - **修复**：见 [改进路线 P2-1](./02-improvement-roadmap.md#p2-1代理认证支持)
-- **状态**：✅ 已补封装（ChaserPage::enable_proxy_auth，2026-08-06。代码就绪，待真实代理环境验证）
+- **状态**：
+  - **HTTP 代理**：✅ 已补 `ChaserPage::enable_proxy_auth`（Fetch.continueWithAuth 响应 407，2026-08-06）
+  - **SOCKS5 代理**：✅ 已补 `Socks5Bridge`（feature `socks5-bridge`，本地 HTTP CONNECT 转发器代为完成 SOCKS5 认证握手，2026-08-06。本机真实代理验证通过）
+
+> **为什么 SOCKS5 需要单独方案**：Chrome/Chromium 网络栈不支持 SOCKS5 用户名/密码认证（架构性缺失），`Fetch.authRequired` 和扩展 `webRequest.onAuthRequired` 都只覆盖 HTTP 代理。SOCKS5 认证在 TCP 握手层，CDP/扩展触达不到。唯一解法是浏览器进程外桥接——`Socks5Bridge` 在本地起 HTTP CONNECT 转发器，代为完成 RFC 1929 认证。详见 `src/socks5_bridge.rs` 文档。
 
 ### D5：类型名未统一改名
 

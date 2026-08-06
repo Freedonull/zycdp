@@ -502,6 +502,124 @@ impl ChaserProfile {
                         writable: true
                     }});
                 }}
+
+                // 11. AudioContext 指纹对抗
+                // 问题：headless/服务器环境无真实音频设备，AudioContext 用软件实现，
+                // 产生的样本哈希与真实桌面不同（CreepJS/FingerprintJS/DataDome 检测点）。
+                // 解法：对 AnalyserNode.getFloatFrequencyData 和 AudioBuffer.getChannelData
+                // 注入确定性微小噪声。噪声基于固定种子，同一会话内稳定一致，避免 Castle
+                // 噪声检测（多次采样比对随机性）识破。注意：噪声幅度极小（1e-7 级），
+                // 不影响音频实际播放，只改变指纹哈希。
+                // 严禁用 ES 模板字面量（反引号+美元花括号），下方 Worker 注入会把它
+                // 嵌进反引号模板，里面的插值会被 Worker 侧求值报 ReferenceError。
+                (function() {{
+                    // 确定性种子：基于 UA 字符串哈希（Rust 侧预算），保证同一会话内所有
+                    // 文档、跨导航噪声一致（避免 Castle 噪声检测：多次采样比对发现噪声
+                    // 每次变化）。不同 profile（不同 UA）种子不同，避免全网 stealth 库
+                    // 指纹相同。
+                    var seed = {audio_seed};
+                    function noise(index) {{
+                        // 简单确定性 PRNG（mulberry32 变体），种子固定则输出固定
+                        var t = (seed + index * 2654435761) | 0;
+                        t = (t ^ (t >>> 15)) * (t | 1);
+                        t ^= t + (t << 7) | (t >>> 9);
+                        return ((t & 0xffffff) / 0x1000000 - 0.5) * 1e-7;
+                    }}
+                    if (typeof AnalyserNode !== 'undefined') {{
+                        var origGetFloat = AnalyserNode.prototype.getFloatFrequencyData;
+                        AnalyserNode.prototype.getFloatFrequencyData = function(array) {{
+                            origGetFloat.apply(this, arguments);
+                            for (var i = 0; i < array.length; i++) {{
+                                array[i] += noise(i);
+                            }}
+                        }};
+                    }}
+                    // AudioBuffer.getChannelData：指纹脚本常用 OfflineAudioContext 渲染后读取。
+                    // 加噪会改变返回的 Float32Array，但不影响离线渲染（离线 context 不实时播放）。
+                    // 实时 context 极少调 getChannelData（用 AudioBufferSourceNode），风险低。
+                    if (typeof AudioBuffer !== 'undefined' && AudioBuffer.prototype.getChannelData) {{
+                        var origGetChannel = AudioBuffer.prototype.getChannelData;
+                        AudioBuffer.prototype.getChannelData = function(channel) {{
+                            var data = origGetChannel.apply(this, arguments);
+                            var noisy = new Float32Array(data.length);
+                            for (var i = 0; i < data.length; i++) {{
+                                noisy[i] = data[i] + noise(i);
+                            }}
+                            return noisy;
+                        }};
+                    }}
+                }})();
+
+                // 12. Canvas 2D 指纹对抗（稳定噪声）
+                // 问题：headless 用软件渲染（SwiftShader/llvmpipe），2D canvas 哈希与真实
+                // GPU 不同。反爬用 toDataURL/getImageData 读哈希比对。
+                // 解法：对 toDataURL / getImageData 注入确定性噪声（同 AudioContext 的
+                // mulberry32 种子思路），噪声极小（单像素 ±1）不影响视觉但改变哈希。
+                (function() {{
+                    var seed = {audio_seed};
+                    function noise(i) {{
+                        var t = (seed + i * 2654435761) | 0;
+                        t = (t ^ (t >>> 15)) * (t | 1);
+                        t ^= t + (t << 7) | (t >>> 9);
+                        return (t & 0x3) - 1; // -1..1
+                    }}
+                    if (typeof HTMLCanvasElement !== 'undefined') {{
+                        var origToDataURL = HTMLCanvasElement.prototype.toDataURL;
+                        HTMLCanvasElement.prototype.toDataURL = function() {{
+                            var ctx = this.getContext('2d');
+                            if (ctx) {{
+                                try {{
+                                    var w = this.width, h = this.height;
+                                    var img = ctx.getImageData(0, 0, w, h);
+                                    for (var i = 0; i < img.data.length; i += 4) {{
+                                        img.data[i] = (img.data[i] + noise(i)) & 0xff;
+                                    }}
+                                    ctx.putImageData(img, 0, 0);
+                                }} catch (_) {{}}
+                            }}
+                            return origToDataURL.apply(this, arguments);
+                        }};
+                    }}
+                }})();
+
+                // 13. navigator.connection 伪造
+                // 问题：headless/服务器环境的 NetworkInformation 值异常（downlink 高、
+                // rtt 接近 0 且从不变化），FingerprintJS 用于一致性校验。
+                // 解法：注入合理的、会微小波动的 connection 对象。
+                if (navigator.connection === undefined) {{
+                    var conn = {{
+                        effectiveType: '4g',
+                        rtt: 50 + (Math.random() * 30 | 0),
+                        downlink: 5 + Math.random() * 3,
+                        saveData: false,
+                        addEventListener: function() {{}},
+                        removeEventListener: function() {{}}
+                    }};
+                    try {{
+                        Object.defineProperty(navigator, 'connection', {{
+                            get: function() {{ return conn; }},
+                            configurable: true
+                        }});
+                    }} catch (_) {{}}
+                }}
+
+                // 14. speechSynthesis voices 伪造
+                // 问题：headless Chrome（尤其 Linux 服务器）的 speechSynthesis.getVoices()
+                // 返回空数组，是经典 headless 信号。
+                // 解法：伪造一个与 Windows UA 匹配的 voices 列表。
+                if (window.speechSynthesis) {{
+                    // 始终返回伪造的稳定 voices 列表（缓存引用，getVoices() === getVoices() 为 true）。
+                    // headless 环境真实 voices 可能延迟加载且为空，统一返回伪造列表更可靠，
+                    // 避免不同调用返回不同数组（空 vs fake vs real）被指纹识别。
+                    var fakeVoices = [
+                        {{name: 'Microsoft David Desktop - English (United States)', lang: 'en-US', localService: true, default: true, voiceURI: 'Microsoft David Desktop - English (United States)'}},
+                        {{name: 'Microsoft Zira Desktop - English (United States)', lang: 'en-US', localService: true, default: false, voiceURI: 'Microsoft Zira Desktop - English (United States)'}},
+                        {{name: 'Google US English', lang: 'en-US', localService: false, default: false, voiceURI: 'Google US English'}}
+                    ];
+                    window.speechSynthesis.getVoices = function() {{
+                        return fakeVoices;
+                    }};
+                }}
             }})();
         "#,
             ua = self.user_agent(),
@@ -510,6 +628,9 @@ impl ChaserProfile {
             device_memory = self.device_memory_value(),
             webgl_vendor = self.gpu.vendor(),
             webgl_renderer = self.gpu.renderer(),
+            // AudioContext/Canvas 噪声的确定性种子：基于 UA 的简单哈希（i32），
+            // 保证同 profile 跨文档/跨导航噪声一致（抗 Castle 噪声检测）。
+            audio_seed = self.user_agent().bytes().fold(0i32, |acc, b| acc.wrapping_mul(31).wrapping_add(b as i32)),
             locale = self.locale,
             ua_data_block = if self.native_ua_data {
                 String::new()
@@ -613,6 +734,26 @@ impl ChaserProfile {
 
                 try {
                     if (navigator.serviceWorker) maskAsNative(navigator.serviceWorker.register, 'register');
+                } catch (_) {}
+
+                // AudioContext 对抗 patch 的函数
+                try {
+                    if (typeof AnalyserNode !== 'undefined') {
+                        maskAsNative(AnalyserNode.prototype.getFloatFrequencyData, 'getFloatFrequencyData');
+                    }
+                    if (typeof AudioBuffer !== 'undefined' && AudioBuffer.prototype.getChannelData) {
+                        maskAsNative(AudioBuffer.prototype.getChannelData, 'getChannelData');
+                    }
+                } catch (_) {}
+
+                // Canvas / speechSynthesis 对抗 patch 的函数
+                try {
+                    if (typeof HTMLCanvasElement !== 'undefined' && HTMLCanvasElement.prototype.toDataURL) {
+                        maskAsNative(HTMLCanvasElement.prototype.toDataURL, 'toDataURL');
+                    }
+                    if (window.speechSynthesis && window.speechSynthesis.getVoices) {
+                        maskAsNative(window.speechSynthesis.getVoices, 'getVoices');
+                    }
                 } catch (_) {}
 
                 try {

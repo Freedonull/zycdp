@@ -60,9 +60,7 @@ where
     .await?;
 
     // handler 循环必须持续推进，否则 CDP 命令永远挂起。
-    tokio::spawn(async move {
-        while handler.next().await.is_some() {}
-    });
+    tokio::spawn(async move { while handler.next().await.is_some() {} });
 
     // 1. 先开 about:blank（建立页面）
     let page = browser.new_page("about:blank").await?;
@@ -313,17 +311,28 @@ async fn dialog_auto_handled() -> anyhow::Result<()> {
         // 2. 在主世界执行 alert —— 不注册处理器时这一步会永久阻塞。
         //    用 call_js_fn（主世界），alert 弹出后由 spawn 的处理器接受，
         //    函数才返回。
-        let body = chaser.raw_page().find_element("body").await.map_err(|e| anyhow::anyhow!(e))?;
+        let body = chaser
+            .raw_page()
+            .find_element("body")
+            .await
+            .map_err(|e| anyhow::anyhow!(e))?;
         let result = tokio::time::timeout(
             std::time::Duration::from_secs(10),
-            body.call_js_fn("function() { alert('test-dialog'); return 'reached-after-alert'; }", false),
+            body.call_js_fn(
+                "function() { alert('test-dialog'); return 'reached-after-alert'; }",
+                false,
+            ),
         )
         .await;
         // call_js_fn 成功且没超时 = alert 被自动处理了
         let resp = result.map_err(|_| anyhow::anyhow!("alert 阻塞超时——dialog 处理器未生效"))??;
-        let v = resp.result.value.ok_or_else(|| anyhow::anyhow!("返回 None"))?;
+        let v = resp
+            .result
+            .value
+            .ok_or_else(|| anyhow::anyhow!("返回 None"))?;
         assert_eq!(
-            v, json!("reached-after-alert"),
+            v,
+            json!("reached-after-alert"),
             "alert 应被处理、函数应继续执行到 return"
         );
 
@@ -351,7 +360,11 @@ async fn to_string_returns_native_code() -> anyhow::Result<()> {
         );
 
         // WebGL getParameter
-        let v = eval(&chaser, "WebGLRenderingContext.prototype.getParameter.toString()").await?;
+        let v = eval(
+            &chaser,
+            "WebGLRenderingContext.prototype.getParameter.toString()",
+        )
+        .await?;
         let s = v.as_str().unwrap_or("");
         assert!(
             s.contains("[native code]"),

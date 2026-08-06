@@ -41,9 +41,7 @@ async fn main() -> anyhow::Result<()> {
         .map_err(|e| anyhow::anyhow!(e))?;
 
     let (browser, mut handler) = Browser::launch(cfg).await?;
-    tokio::spawn(async move {
-        while handler.next().await.is_some() {}
-    });
+    tokio::spawn(async move { while handler.next().await.is_some() {} });
 
     println!("\n[+] 经 SOCKS5 桥接访问 http://ip-api.com/json ...");
     let page = browser.new_page("about:blank").await?;

@@ -119,8 +119,6 @@ zycdp 的核心价值在 **stealth 内核**（`Runtime.enable` 对抗、指纹�
 
 | 项 | 状态 | commit | 完成日期 | 备注 |
 |---|---|---|---|---|
-| 项 | 状态 | commit | 完成日期 | 备注 |
-|---|---|---|---|---|
 | P0-1 rebrowser parity | ✅ 已完成（重新定性为文档修正） | - | 2026-08-06 | 原方案证伪；改为修正夸大注释，执行模型不变 |
 | P0-2 Windows 内存探测 | ✅ 已完成 | - | 2026-08-06 | GlobalMemoryStatusEx via windows-sys 0.52 |
 | P0-3 离线回归测试 | ✅ 已完成（本机验证通过） | - | 2026-08-06 | tests/stealth/offline_assertions.rs，4 个测试 4 passed，覆盖指纹一致性/chrome对象/CDP标记清理/toString |

@@ -114,6 +114,8 @@ cargo run --example profile_demo
 | `human_idle(min, max)` / `idle()` | 随机停顿，抗行为分析 | 纯等待 |
 | `move_mouse_human` / `click_human` / `scroll_human` / `type_text[_with_typos]` | 人类式鼠标/键盘/滚动 | Input |
 | `enable_request_interception` / `fulfill_request_html` / `continue_request` | 请求拦截 | Fetch |
+| `on_dialog(handler)` / `auto_handle_dialogs(accept)` | 自动处理 alert/confirm/prompt/beforeunload，不注册则弹框阻塞页面 | Page 事件 + handleJavaScriptDialog |
+| `enable_proxy_auth(user, pass)` | 代理 HTTP 认证（响应 407），让 `user:pass@host:port` 代理可用 | Fetch.continueWithAuth |
 
 ## Bootstrap JS 的 toString 对抗约束
 

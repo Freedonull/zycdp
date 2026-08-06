@@ -49,7 +49,7 @@
 - **现状**：不支持 `user:pass@host:port`（Chrome 限制，非 zycdp bug），但 zycdp 也没有 `Fetch.continueWithAuth` 的封装
 - **影响**：带认证的代理需要外部转发器才能用
 - **修复**：见 [改进路线 P2-1](./02-improvement-roadmap.md#p2-1代理认证支持)
-- **状态**：⬜ 待修复
+- **状态**：✅ 已补封装（ChaserPage::enable_proxy_auth，2026-08-06。代码就绪，待真实代理环境验证）
 
 ### D5：类型名未统一改名
 
@@ -64,6 +64,7 @@
 ### M1：Dialog 处理缺失
 - alert/confirm/prompt 无法处理，弹框一出页面卡死
 - 修复：见 [改进路线 P2-2](./02-improvement-roadmap.md#p2-2dialog--文件上传--select-下拉补全)
+- **状态**：✅ 已补（ChaserPage::on_dialog + auto_handle_dialogs，2026-08-06。本机验证 alert 自动接受、页面不卡死）
 
 ### M2：文件上传缺失
 - 无 `set_input_files`，无法上传文件

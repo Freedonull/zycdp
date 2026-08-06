@@ -125,8 +125,8 @@ zycdp 的核心价值在 **stealth 内核**（`Runtime.enable` 对抗、指纹�
 | P1-1 toString 对抗 | ✅ 已完成 | - | 2026-08-06 | WeakMap + Function.prototype.toString 重写，注册被 patch 函数返回 [native code] |
 | P1-2 类型名改名 | ⬜ 待开始 | - | - | breaking change，建议 0.3.0 统一做 |
 | P1-3 Locator API | ✅ 已完成 | - | 2026-08-06 | wait_for_selector + find_by_text/click_by_text + ZyLocator 句柄；查询走 DOM 域 |
-| P2-1 代理认证 | ⬜ 待开始 | - | - | - |
-| P2-2 dialog/upload/select | 🟡 部分完成 | - | 2026-08-06 | select_option + set_input_files 已加；dialog 处理未加 |
+| P2-1 代理认证 | ✅ 已完成（代码就绪，待真实代理验证） | - | 2026-08-06 | enable_proxy_auth via Fetch.continueWithAuth，自动响应 407 |
+| P2-2 dialog/upload/select | ✅ 已完成 | - | 2026-08-06 | on_dialog/auto_handle_dialogs（已验证）+ select_option + set_input_files |
 | P2-3 冲突隔离 | ⬜ 待开始 | - | - | - |
 | 额外：drag_human 仿真拖拽 | ✅ 已完成 | - | 2026-08-06 | 贝塞尔移动 + 按下/位移/释放 |
 | 额外：human_idle 仿真等待 | ✅ 已完成 | - | 2026-08-06 | 随机停顿，抗行为分析 |

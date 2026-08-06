@@ -634,6 +634,15 @@ impl ChaserProfile {
                     }
                 } catch (_) {}
 
+                // Error.prepareStackTrace 的 get/set（上面 bootstrap 定义在 Error 上）
+                try {
+                    var esd = Object.getOwnPropertyDescriptor(Error, 'prepareStackTrace');
+                    if (esd) {
+                        if (typeof esd.get === 'function') maskAsNative(esd.get, 'get prepareStackTrace');
+                        if (typeof esd.set === 'function') maskAsNative(esd.set, 'set prepareStackTrace');
+                    }
+                } catch (_) {}
+
                 // === 重写 Function.prototype.toString ===
                 var toStringProxy = function toString() {
                     if (patched.has(this)) {

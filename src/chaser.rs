@@ -1111,8 +1111,8 @@ impl ChaserPage {
     /// ```
     pub async fn enable_proxy_auth(&self, username: &str, password: &str) -> Result<()> {
         use chromiumoxide_cdp::cdp::browser_protocol::fetch::{
-            AuthChallengeResponse, AuthChallengeResponseResponse, ContinueWithAuthParams,
-            EventAuthRequired,
+            AuthChallengeResponse, AuthChallengeResponseResponse, AuthChallengeSource,
+            ContinueWithAuthParams, EventAuthRequired,
         };
         use futures::StreamExt;
 
@@ -1139,17 +1139,23 @@ impl ChaserPage {
 
         tokio::spawn(async move {
             while let Some(ev) = stream.next().await {
-                let req_id = ev.request_id.clone();
+                // 关键安全过滤：只响应代理认证（source == Proxy）。
+                // source == Server 是站点本身的 401 basic auth，此时绝不能把代理
+                // 用户名/密码当站点凭据发出去——既是凭据泄露，也会破坏站点登录。
+                // 对 Server 认证用 Default（交给浏览器默认行为，不提供凭据）。
+                let is_proxy = ev.auth_challenge.source == Some(AuthChallengeSource::Proxy);
+                let mut resp = AuthChallengeResponse::builder();
+                if is_proxy {
+                    resp = resp
+                        .response(AuthChallengeResponseResponse::ProvideCredentials)
+                        .username(user.clone())
+                        .password(pass.clone());
+                } else {
+                    resp = resp.response(AuthChallengeResponseResponse::Default);
+                }
                 let cmd = ContinueWithAuthParams::builder()
-                    .request_id(req_id)
-                    .auth_challenge_response(
-                        AuthChallengeResponse::builder()
-                            .response(AuthChallengeResponseResponse::ProvideCredentials)
-                            .username(user.clone())
-                            .password(pass.clone())
-                            .build()
-                            .unwrap(),
-                    )
+                    .request_id(ev.request_id.clone())
+                    .auth_challenge_response(resp.build().unwrap())
                     .build()
                     .unwrap();
                 if let Err(e) = page.execute(cmd).await {
@@ -1285,6 +1291,13 @@ impl BezierPath {
         // Calculate distance for offset scaling
         let dist = ((end.x - start.x).powi(2) + (end.y - start.y).powi(2)).sqrt();
         let offset_range = dist * 0.3;
+
+        // 零距离守卫：start == end 时 offset_range 为 0，后续 gen_range(-0.0..0.0)
+        // 会触发 rand 的 assert 而 panic。直接返回终点即可（无需移动）。
+        if offset_range == 0.0 {
+            path.push(end);
+            return path;
+        }
 
         // First control point (25% along the path with random offset)
         let p1 = Point {

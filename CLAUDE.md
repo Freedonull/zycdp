@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-chaser-oxide is a Rust-based fork of `chromiumoxide` specialized for hardened browser automation. It provides protocol-level stealth modifications to the Chrome DevTools Protocol (CDP) client to reduce the detection footprint of automated browser sessions.
+zycdp is a Rust-based fork of `chromiumoxide` specialized for hardened browser automation. It provides protocol-level stealth modifications to the Chrome DevTools Protocol (CDP) client to reduce the detection footprint of automated browser sessions.
 
 ## Build & Test Commands
 
@@ -39,7 +39,7 @@ cargo run --example profile_demo
 
 This is a Cargo workspace with multiple crates:
 
-- **`chaser-oxide`** (root) - Main library with stealth automation API
+- **`zycdp`** (root) - Main library with stealth automation API
 - **`chromiumoxide_cdp`** - Generated CDP protocol definitions (~60K lines, generated at build time)
 - **`chromiumoxide_pdl`** - PDL (Protocol Definition Language) parser for generating CDP bindings
 - **`chromiumoxide_types`** - Shared types across crates

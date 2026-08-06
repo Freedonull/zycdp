@@ -6,7 +6,7 @@
 //! # Example
 //! ```no_run
 //! use futures::StreamExt;
-//! use chaser_oxide::{Browser, BrowserConfig};
+//! use zycdp::{Browser, BrowserConfig};
 //!
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn std::error::Error>> {

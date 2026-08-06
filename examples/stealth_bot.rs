@@ -1,11 +1,11 @@
 use anyhow::Result;
-use chaser_oxide::{Browser, BrowserConfig, ChaserPage};
+use zycdp::{Browser, BrowserConfig, ChaserPage};
 use futures::StreamExt;
 use std::time::Duration;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    println!("Launching chaser-oxide Stealth Browser...");
+    println!("Launching zycdp Stealth Browser...");
     let (browser, mut handler) = Browser::launch(
         BrowserConfig::builder()
             .viewport(None)
@@ -56,7 +56,7 @@ async fn main() -> Result<()> {
     chaser
         .raw_page()
         .save_screenshot(
-            chaser_oxide::page::ScreenshotParams::builder().build(),
+            zycdp::page::ScreenshotParams::builder().build(),
             "stealth_test.png",
         )
         .await?;

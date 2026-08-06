@@ -214,7 +214,7 @@ impl FrameManager {
         let get_tree = page::GetFrameTreeParams::default();
         let set_lifecycle = page::SetLifecycleEventsEnabledParams::new(true);
 
-        // chaser-oxide Stealth: We do NOT enable Runtime here.
+        // zycdp Stealth: We do NOT enable Runtime here.
         // Context IDs are obtained via Page.createIsolatedWorld on-demand.
 
         CommandChain::new(

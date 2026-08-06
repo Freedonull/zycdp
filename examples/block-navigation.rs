@@ -4,12 +4,12 @@ use std::time::Duration;
 
 use base64::Engine;
 use base64::prelude::BASE64_STANDARD;
-use chaser_oxide::Page;
-use chaser_oxide::browser::{Browser, BrowserConfig};
-use chaser_oxide::cdp::browser_protocol::fetch::{
+use zycdp::Page;
+use zycdp::browser::{Browser, BrowserConfig};
+use zycdp::cdp::browser_protocol::fetch::{
     self, ContinueRequestParams, EventRequestPaused, FailRequestParams, FulfillRequestParams,
 };
-use chaser_oxide::cdp::browser_protocol::network::{
+use zycdp::cdp::browser_protocol::network::{
     self, ErrorReason, EventRequestWillBeSent, ResourceType,
 };
 use futures::{StreamExt, select};

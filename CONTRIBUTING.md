@@ -1,11 +1,11 @@
-# Contributing to chaser-oxide
+# Contributing to zycdp
 
-Thank you for your interest in contributing to chaser-oxide! This document provides guidelines and instructions for contributing.
+Thank you for your interest in contributing to zycdp! This document provides guidelines and instructions for contributing.
 
 ## Getting Started
 
 1. Fork the repository
-2. Clone your fork: `git clone https://github.com/YOUR_USERNAME/chaser-oxide.git`
+2. Clone your fork: `git clone https://github.com/YOUR_USERNAME/zycdp.git`
 3. Create a new branch: `git checkout -b feature/your-feature-name`
 
 ## Development Setup
@@ -27,7 +27,7 @@ RUST_TEST_THREADS=1 cargo test --test '*'
 ## Project Structure
 
 This is a Cargo workspace with multiple crates:
-- `chaser-oxide` - Main library
+- `zycdp` - Main library
 - `chromiumoxide_cdp` - CDP protocol definitions
 - `chromiumoxide_fetcher` - Browser binary fetcher
 - `chromiumoxide_pdl` - PDL parser

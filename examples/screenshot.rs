@@ -1,5 +1,5 @@
-use chaser_oxide::browser::{Browser, BrowserConfig};
-use chaser_oxide::page::ScreenshotParams;
+use zycdp::browser::{Browser, BrowserConfig};
+use zycdp::page::ScreenshotParams;
 use chromiumoxide_cdp::cdp::browser_protocol::page::CaptureScreenshotFormat;
 use futures::StreamExt;
 

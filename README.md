@@ -1,16 +1,10 @@
-<a href="https://chaser.sh"><img src="banner.png" alt="Chaser — The Infrastructure Platform" width="100%"/></a>
+# zycdp
 
-# chaser-oxide
-
-[![Crates.io](https://img.shields.io/crates/v/chaser-oxide.svg)](https://crates.io/crates/chaser-oxide)
-[![Documentation](https://docs.rs/chaser-oxide/badge.svg)](https://docs.rs/chaser-oxide)
-[![License](https://img.shields.io/crates/l/chaser-oxide.svg)](https://github.com/ccheshirecat/chaser-oxide)
+[![License](https://img.shields.io/crates/l/zycdp.svg)](https://github.com/Freedonull/zycdp)
 
 **A Rust-based fork of `chromiumoxide` for hardened, undetectable browser automation.**
 
-The stealth CDP layer running in production at [chaser.sh](https://chaser.sh) — 13,000+ V8 patches, no-JS protocol stealth, kernel-level egress, 300+ concurrent sessions on a single node.
-
-chaser-oxide modifies the Chrome DevTools Protocol (CDP) client at the transport and protocol layer to reduce the detection footprint of automated browser sessions. The default profile auto-detects your host OS, Chrome version, and RAM — no hardcoded Windows spoofing out of the box.
+zycdp modifies the Chrome DevTools Protocol (CDP) client at the transport and protocol layer to reduce the detection footprint of automated browser sessions. The default profile auto-detects your host OS, Chrome version, and RAM — no hardcoded Windows spoofing out of the box.
 
 ## Features
 
@@ -25,14 +19,14 @@ chaser-oxide modifies the Chrome DevTools Protocol (CDP) client at the transport
 ## Installation
 
 ```bash
-cargo add chaser-oxide tokio futures
+cargo add zycdp tokio futures
 ```
 
 Or in `Cargo.toml`:
 
 ```toml
 [dependencies]
-chaser-oxide = "0.2.3"
+zycdp = "0.2.3"
 tokio = { version = "1", features = ["full"] }
 futures = "0.3"
 anyhow = "1.0.102"
@@ -52,7 +46,7 @@ serde_json = "1.0.149"
 Uses your real OS, real Chrome version, and real RAM. Just strips HeadlessChrome from the UA.
 
 ```rust
-use chaser_oxide::{Browser, BrowserConfig, ChaserPage};
+use zycdp::{Browser, BrowserConfig, ChaserPage};
 use futures::StreamExt;
 use serde_json::Value;
 
@@ -88,7 +82,7 @@ async fn main() -> anyhow::Result<()> {
 Opt into a specific profile when you need to appear as a different OS:
 
 ```rust
-use chaser_oxide::{Browser, BrowserConfig, ChaserPage, ChaserProfile, Gpu};
+use zycdp::{Browser, BrowserConfig, ChaserPage, ChaserProfile, Gpu};
 use futures::StreamExt;
 
 #[tokio::main]
@@ -169,7 +163,7 @@ impl ChaserPage {
 ### ChaserProfile Builder
 
 ```rust
-use chaser_oxide::{ChaserProfile, Gpu};
+use zycdp::{ChaserProfile, Gpu};
 
 // Auto-detect from host environment
 let native  = ChaserProfile::native().build();
@@ -261,7 +255,7 @@ Applies basic automation signal removal without any OS or version spoofing:
 
 ## Technical Comparison
 
-| Metric | chaser-oxide | Node.js Alternatives |
+| Metric | zycdp | Node.js Alternatives |
 |---|---|---|
 | **Language** | Rust | JavaScript |
 | **Memory Footprint** | ~50–100MB | ~500MB+ |

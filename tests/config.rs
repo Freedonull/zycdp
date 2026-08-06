@@ -1,5 +1,5 @@
 use crate::test_config;
-use chaser_oxide::BrowserConfig;
+use zycdp::BrowserConfig;
 
 #[tokio::test]
 #[ignore] // For some reason, this test fails on CI but works locally

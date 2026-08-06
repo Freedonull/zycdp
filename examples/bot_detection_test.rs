@@ -1,5 +1,5 @@
 use anyhow::Result;
-use chaser_oxide::{Browser, BrowserConfig, ChaserPage};
+use zycdp::{Browser, BrowserConfig, ChaserPage};
 use futures::StreamExt;
 use serde_json::Value;
 use std::time::Duration;

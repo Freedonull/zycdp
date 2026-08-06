@@ -1,7 +1,7 @@
 use std::path::Path;
 
-use chaser_oxide::browser::{Browser, BrowserConfig};
-use chaser_oxide::fetcher::{BrowserFetcher, BrowserFetcherOptions};
+use zycdp::browser::{Browser, BrowserConfig};
+use zycdp::fetcher::{BrowserFetcher, BrowserFetcherOptions};
 use futures::StreamExt;
 
 #[tokio::main]

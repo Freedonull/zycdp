@@ -312,8 +312,8 @@ impl Page {
     ///
     /// # Example Listen for canceled animations
     /// ```no_run
-    /// # use chaser_oxide::page::Page;
-    /// # use chaser_oxide::error::Result;
+    /// # use zycdp::page::Page;
+    /// # use zycdp::error::Result;
     /// # use chromiumoxide_cdp::cdp::browser_protocol::animation::EventAnimationCanceled;
     /// # use futures::StreamExt;
     /// # async fn demo(page: Page) -> Result<()> {
@@ -328,12 +328,12 @@ impl Page {
     /// # Example Liste for a custom event
     ///
     /// ```no_run
-    /// # use chaser_oxide::page::Page;
-    /// # use chaser_oxide::error::Result;
+    /// # use zycdp::page::Page;
+    /// # use zycdp::error::Result;
     /// # use futures::StreamExt;
     /// # use serde::Deserialize;
-    /// # use chaser_oxide::types::{MethodId, MethodType};
-    /// # use chaser_oxide::cdp::CustomEvent;
+    /// # use zycdp::types::{MethodId, MethodType};
+    /// # use zycdp::cdp::CustomEvent;
     /// # async fn demo(page: Page) -> Result<()> {
     ///     #[derive(Debug, Clone, Eq, PartialEq, Deserialize)]
     ///     struct MyCustomEvent {
@@ -608,9 +608,9 @@ impl Page {
     /// Trigger a navigation and wait until the triggered navigation is finished
     ///
     /// ```no_run
-    /// # use chaser_oxide::page::Page;
-    /// # use chaser_oxide::error::Result;
-    /// # use chaser_oxide::layout::Point;
+    /// # use zycdp::page::Page;
+    /// # use zycdp::error::Result;
+    /// # use zycdp::layout::Point;
     /// # async fn demo(page: Page, point: Point) -> Result<()> {
     ///     let html = page.click(point).await?.wait_for_navigation().await?.content();
     ///     # Ok(())
@@ -621,10 +621,10 @@ impl Page {
     /// Use [`click_with()`] to perform a custom click:
     ///
     /// ```no_run
-    /// # use chaser_oxide::page::Page;
-    /// # use chaser_oxide::error::Result;
-    /// # use chaser_oxide::layout::Point;
-    /// # use chaser_oxide::types::ClickOptions;
+    /// # use zycdp::page::Page;
+    /// # use zycdp::error::Result;
+    /// # use zycdp::layout::Point;
+    /// # use zycdp::types::ClickOptions;
     /// # async fn demo(page: Page, point: Point) -> Result<()> {
     ///     let options = ClickOptions::builder()
     ///         .click_count(2)
@@ -641,9 +641,9 @@ impl Page {
     /// issuing `DispatchMouseEventParams` commands directly via the CDP API.
     ///
     /// ```no_run
-    /// # use chaser_oxide::page::Page;
-    /// # use chaser_oxide::error::Result;
-    /// # use chaser_oxide::layout::Point;
+    /// # use zycdp::page::Page;
+    /// # use zycdp::error::Result;
+    /// # use zycdp::layout::Point;
     /// # use chromiumoxide_cdp::cdp::browser_protocol::input::{DispatchMouseEventParams, MouseButton, DispatchMouseEventType};
     /// # async fn demo(page: Page, point: Point) -> Result<()> {
     ///      // double click
@@ -695,10 +695,10 @@ impl Page {
     /// Perform a double click using [`ClickOptions`]
     ///
     /// ```no_run
-    /// # use chaser_oxide::page::Page;
-    /// # use chaser_oxide::error::Result;
-    /// # use chaser_oxide::layout::Point;
-    /// # use chaser_oxide::types::ClickOptions;
+    /// # use zycdp::page::Page;
+    /// # use zycdp::error::Result;
+    /// # use zycdp::layout::Point;
+    /// # use zycdp::types::ClickOptions;
     /// # async fn demo(page: Page, point: Point) -> Result<()> {
     ///     let options = ClickOptions::builder()
     ///         .click_count(2)
@@ -734,8 +734,8 @@ impl Page {
     /// # Example save a png file of a website
     ///
     /// ```no_run
-    /// # use chaser_oxide::page::{Page, ScreenshotParams};
-    /// # use chaser_oxide::error::Result;
+    /// # use zycdp::page::{Page, ScreenshotParams};
+    /// # use zycdp::error::Result;
     /// # use chromiumoxide_cdp::cdp::browser_protocol::page::CaptureScreenshotFormat;
     /// # async fn demo(page: Page) -> Result<()> {
     ///         page.goto("http://example.com")
@@ -845,8 +845,8 @@ impl Page {
     ///
     /// To reload ignoring cache run:
     /// ```no_run
-    /// # use chaser_oxide::page::Page;
-    /// # use chaser_oxide::error::Result;
+    /// # use zycdp::page::Page;
+    /// # use zycdp::error::Result;
     /// # use chromiumoxide_cdp::cdp::browser_protocol::page::ReloadParams;
     /// # async fn demo(page: Page) -> Result<()> {
     ///     page.execute(ReloadParams::builder().ignore_cache(true).build()).await?;
@@ -960,8 +960,8 @@ impl Page {
     ///
     /// # Example
     /// ```no_run
-    /// # use chaser_oxide::page::Page;
-    /// # use chaser_oxide::error::Result;
+    /// # use zycdp::page::Page;
+    /// # use zycdp::error::Result;
     /// # use chromiumoxide_cdp::cdp::browser_protocol::network::CookieParam;
     /// # async fn demo(page: Page) -> Result<()> {
     ///     page.set_cookie(CookieParam::new("Cookie-name", "Cookie-value")).await?;
@@ -1108,8 +1108,8 @@ impl Page {
     /// This will take the arguments `(1,2)` and will call the function
     ///
     /// ```no_run
-    /// # use chaser_oxide::page::Page;
-    /// # use chaser_oxide::error::Result;
+    /// # use zycdp::page::Page;
+    /// # use zycdp::error::Result;
     /// # async fn demo(page: Page) -> Result<()> {
     ///     let sum: usize = page
     ///         .evaluate_expression("((a,b) => {return a + b;})(1,2)")
@@ -1153,8 +1153,8 @@ impl Page {
     /// option
     ///
     /// ```no_run
-    /// # use chaser_oxide::page::Page;
-    /// # use chaser_oxide::error::Result;
+    /// # use zycdp::page::Page;
+    /// # use zycdp::error::Result;
     /// # use chromiumoxide_cdp::cdp::js_protocol::runtime::{EvaluateParams, RemoteObjectType};
     /// # async fn demo(page: Page) -> Result<()> {
     ///     let eval = EvaluateParams::builder().expression("() => {return 42;}");
@@ -1178,8 +1178,8 @@ impl Page {
     ///
     /// # Example Evaluate basic expression
     /// ```no_run
-    /// # use chaser_oxide::page::Page;
-    /// # use chaser_oxide::error::Result;
+    /// # use zycdp::page::Page;
+    /// # use zycdp::error::Result;
     /// # async fn demo(page: Page) -> Result<()> {
     ///     let sum:usize = page.evaluate("1 + 2").await?.into_value()?;
     ///     assert_eq!(sum, 3);
@@ -1214,8 +1214,8 @@ impl Page {
     /// # Example Evaluate a promise
     /// This will wait until the promise resolves and then returns the result.
     /// ```no_run
-    /// # use chaser_oxide::page::Page;
-    /// # use chaser_oxide::error::Result;
+    /// # use zycdp::page::Page;
+    /// # use zycdp::error::Result;
     /// # async fn demo(page: Page) -> Result<()> {
     ///     let sum:usize = page.evaluate_function("() => Promise.resolve(1 + 2)").await?.into_value()?;
     ///     assert_eq!(sum, 3);
@@ -1225,8 +1225,8 @@ impl Page {
     ///
     /// # Example Evaluate an async function
     /// ```no_run
-    /// # use chaser_oxide::page::Page;
-    /// # use chaser_oxide::error::Result;
+    /// # use zycdp::page::Page;
+    /// # use zycdp::error::Result;
     /// # async fn demo(page: Page) -> Result<()> {
     ///     let val:usize = page.evaluate_function("async function() {return 42;}").await?.into_value()?;
     ///     assert_eq!(val, 42);
@@ -1236,8 +1236,8 @@ impl Page {
     /// # Example Construct a function call
     ///
     /// ```no_run
-    /// # use chaser_oxide::page::Page;
-    /// # use chaser_oxide::error::Result;
+    /// # use zycdp::page::Page;
+    /// # use zycdp::error::Result;
     /// # use chromiumoxide_cdp::cdp::js_protocol::runtime::{CallFunctionOnParams, CallArgument};
     /// # async fn demo(page: Page) -> Result<()> {
     ///     let call = CallFunctionOnParams::builder()
@@ -1307,7 +1307,7 @@ impl Page {
     ///
     /// # Example
     /// ```
-    /// # use chaser_oxide::page::Page;
+    /// # use zycdp::page::Page;
     /// # async fn example(page: Page) -> Result<(), Box<dyn std::error::Error>> {
     /// // Hide webdriver property for stealth scraping
     /// page.evaluate_on_new_document(r#"
@@ -1338,8 +1338,8 @@ impl Page {
     ///
     /// # Example
     /// ```no_run
-    /// # use chaser_oxide::page::Page;
-    /// # use chaser_oxide::error::Result;
+    /// # use zycdp::page::Page;
+    /// # use zycdp::error::Result;
     /// # async fn demo(page: Page) -> Result<()> {
     ///     page.set_content("<body>
     ///  <h1>This was set via chromiumoxide</h1>

@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use crate::test;
-use chaser_oxide::Browser;
+use zycdp::Browser;
 use serde_json::Value;
 use tokio::time::sleep;
 

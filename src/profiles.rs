@@ -6,7 +6,7 @@
 //! # Example
 //!
 //! ```rust
-//! use chaser_oxide::profiles::{ChaserProfile, Gpu};
+//! use zycdp::profiles::{ChaserProfile, Gpu};
 //!
 //! let profile = ChaserProfile::windows()
 //!     .chrome_version(130)
@@ -133,7 +133,7 @@ impl Os {
 /// # Example
 ///
 /// ```rust
-/// use chaser_oxide::profiles::{ChaserProfile, Gpu, Os};
+/// use zycdp::profiles::{ChaserProfile, Gpu, Os};
 ///
 /// // Quick preset
 /// let profile = ChaserProfile::windows().build();
@@ -293,7 +293,7 @@ impl ChaserProfile {
         let mut script = format!(
             r#"
             (function() {{
-                // === chaser-oxide HARDWARE HARMONY ===
+                // === zycdp HARDWARE HARMONY ===
                 // Profile: {ua}
 
                 // 0. CDP Marker Cleanup (run once at startup)

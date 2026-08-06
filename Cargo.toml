@@ -1,5 +1,5 @@
 [package]
-name = "chaser-oxide"
+name = "zycdp"
 version = "0.2.4"
 rust-version = "1.85"
 autotests = false
@@ -8,7 +8,7 @@ license = "MIT OR Apache-2.0"
 readme = "README.md"
 description = "Undetectable browser automation library"
 authors = ["ccheshirecat"]
-repository = "https://github.com/ccheshirecat/chaser-oxide"
+repository = "https://github.com/Freedonull/zycdp"
 keywords = ["chrome", "chromedriver", "puppeteer", "automation", "stealth"]
 categories = ["web-programming", "api-bindings", "development-tools::testing"]
 

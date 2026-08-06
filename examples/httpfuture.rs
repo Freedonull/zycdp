@@ -1,5 +1,5 @@
-use chaser_oxide::browser::{Browser, BrowserConfig};
-use chaser_oxide::cdp::browser_protocol::page::NavigateParams;
+use zycdp::browser::{Browser, BrowserConfig};
+use zycdp::cdp::browser_protocol::page::NavigateParams;
 use futures::StreamExt;
 use futures::TryFutureExt;
 

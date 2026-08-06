@@ -1,6 +1,6 @@
-use chaser_oxide::browser::Browser;
-use chaser_oxide::browser::BrowserConfig;
-use chaser_oxide::cdp::browser_protocol::network::CookieParam;
+use zycdp::browser::Browser;
+use zycdp::browser::BrowserConfig;
+use zycdp::cdp::browser_protocol::network::CookieParam;
 use futures::StreamExt;
 
 #[tokio::main]

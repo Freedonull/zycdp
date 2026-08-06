@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use chaser_oxide::{BrowserConfig, Page};
+use zycdp::{BrowserConfig, Page};
 use serde::Deserialize;
 use tokio::time::sleep;
 

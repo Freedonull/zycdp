@@ -1,4 +1,4 @@
-use chaser_oxide::browser::{Browser, BrowserConfig};
+use zycdp::browser::{Browser, BrowserConfig};
 use chromiumoxide_cdp::cdp::browser_protocol::page::PrintToPdfParams;
 use futures::StreamExt;
 

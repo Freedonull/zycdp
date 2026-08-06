@@ -1,7 +1,7 @@
 use std::panic;
 use std::sync::OnceLock;
 
-use chaser_oxide::{Browser, BrowserConfig};
+use zycdp::{Browser, BrowserConfig};
 use futures::{FutureExt, StreamExt};
 use tokio::sync::Semaphore;
 

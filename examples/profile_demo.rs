@@ -4,7 +4,7 @@
 //! with the ergonomic builder pattern.
 
 use anyhow::Result;
-use chaser_oxide::{Browser, BrowserConfig, ChaserPage, ChaserProfile, Gpu};
+use zycdp::{Browser, BrowserConfig, ChaserPage, ChaserProfile, Gpu};
 use futures::StreamExt;
 use std::time::Duration;
 

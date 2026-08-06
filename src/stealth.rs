@@ -13,7 +13,7 @@
 /// # Example
 ///
 /// ```rust
-/// use chaser_oxide::stealth::StealthProfile;
+/// use zycdp::stealth::StealthProfile;
 ///
 /// struct LinuxChromeProfile;
 ///
@@ -67,7 +67,7 @@ pub trait StealthProfile: Send + Sync {
     fn bootstrap_script(&self) -> String {
         format!(
             r#"
-            // === chaser-oxide HARDWARE HARMONY ===
+            // === zycdp HARDWARE HARMONY ===
             // Profile: {ua}
 
             // 1. Platform alignment (on prototype to avoid getOwnPropertyNames detection)

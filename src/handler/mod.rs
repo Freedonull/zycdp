@@ -403,7 +403,7 @@ impl Handler {
 
     /// Process an incoming event read from the websocket
     fn on_event(&mut self, event: CdpEventMessage) {
-        // chaser-oxide Stealth: Capture Context ID BEFORE dispatching to target
+        // zycdp Stealth: Capture Context ID BEFORE dispatching to target
         // This must be done first because target.on_event() doesn't return the event
         if let CdpEvent::RuntimeBindingCalled(ev) = &event.params {
             if ev.name == "chaser_init" {

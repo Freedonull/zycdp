@@ -123,7 +123,7 @@ zycdp 的核心价值在 **stealth 内核**（`Runtime.enable` 对抗、指纹�
 |---|---|---|---|---|
 | P0-1 rebrowser parity | ✅ 已完成（重新定性为文档修正） | - | 2026-08-06 | 原方案证伪；改为修正夸大注释，执行模型不变 |
 | P0-2 Windows 内存探测 | ✅ 已完成 | - | 2026-08-06 | GlobalMemoryStatusEx via windows-sys 0.52 |
-| P0-3 离线回归测试 | ✅ 已完成（本机验证通过） | - | 2026-08-06 | tests/stealth/offline_assertions.rs，4 个测试 4 passed，覆盖指纹一致性/chrome对象/CDP标记清理/toString |
+| P0-3 离线回归测试 | ✅ 已完成（本机验证通过） | - | 2026-08-06 | tests/stealth/offline_assertions.rs，14 passed + 2 ignored，覆盖指纹一致性/chrome对象/CDP标记清理/toString/Shadow DOM/iframe/响应体/键盘/canvas/audio/voices |
 | P1-1 toString 对抗 | ✅ 已完成 | - | 2026-08-06 | WeakMap + Function.prototype.toString 重写，注册被 patch 函数返回 [native code] |
 | P1-2 类型名改名 | ⬜ 待开始 | - | - | breaking change，建议 0.3.0 统一做 |
 | P1-3 Locator API | ✅ 已完成 | - | 2026-08-06 | wait_for_selector + find_by_text/click_by_text + ZyLocator 句柄；查询走 DOM 域 |
@@ -141,7 +141,7 @@ zycdp 的核心价值在 **stealth 内核**（`Runtime.enable` 对抗、指纹�
 | iframe 内操作（ZyFrame） | ✅ 已完成 | 2026-08-06 | evaluate_in_frame（frame 上 createIsolatedWorld，stealth-safe）+ frame()/frame_ids() + ZyFrame 句柄（evaluate/click_in/text_in） |
 | 网络响应体拦截 | ✅ 已完成 | 2026-08-06 | wait_for_response（Network.getResponseBody，订阅 responseReceived+loadingFinished） |
 | 文件下载 | ✅ 已完成 | 2026-08-06 | enable_downloads + wait_for_download（Browser.setDownloadBehavior + 下载事件，DownloadInfo） |
-| AudioContext 指纹对抗 | ✅ 已完成 | 2026-08-06 | getFloatFrequencyData/getChannelData 确定性噪声（mulberry32 种子） |
+| AudioContext 指纹对抗 | ✅ 已完成 | 2026-08-06 | getChannelData 确定性噪声（mulberry32 UA 哈希种子）；analyser 路径是死代码已删（-Infinity 吞噪） |
 | 页面生命周期等待 networkidle | ✅ 已完成 | 2026-08-06 | wait_for_load_state(LoadState) + LoadState 枚举 |
 | TLS/H2 指纹红线 | ✅ 已完成 | 2026-08-06 | AGENTS.md 红线第 6 条：永不把请求路由到 Rust HTTP 客户端 |
 | Canvas 2D 指纹噪声 | ✅ 已完成 | 2026-08-06 | toDataURL 确定性像素噪声（±1） |

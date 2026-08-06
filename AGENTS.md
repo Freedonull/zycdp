@@ -121,6 +121,7 @@ cargo run --example profile_demo
 | `enable_proxy_auth(user, pass)` | HTTP 代理认证（响应 407，已过滤 source==Proxy） | Fetch.continueWithAuth |
 | `Socks5Bridge::start(host,port,user,pass)` → `proxy_arg()` | **SOCKS5 带认证代理**桥接（feature `socks5-bridge`）。本地起 HTTP CONNECT 转发器代做 RFC 1929 认证 | tokio-socks + hyper |
 | `evaluate_in_frame(frame_id, script)` / `frame(matcher)` / `frame_ids()` / `ZyFrame` | iframe 内操作（在该 frame 上 createIsolatedWorld） | createIsolatedWorld |
+| `find_in_shadow(host_sel, inner_sel)` / `find_in_shadow_deep("host >>> .inner")` | Shadow DOM 穿透查找（open + closed shadow root 都有效） | DOM.describeNode(pierce=true) + querySelector |
 | `wait_for_load_state(LoadState, timeout)` | 等 networkidle/DOMContentLoaded/load | Page lifecycle 事件 |
 | `enable_geolocation(lat,lng)` / `grant_permissions(&[...])` | 地理位置伪造 + 权限授予 | Emulation + Browser.setPermission |
 | `wait_for_popup(timeout)` | 捕获本页打开的新窗口/popup | Target.attachedToTarget |

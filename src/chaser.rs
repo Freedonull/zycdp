@@ -917,6 +917,111 @@ impl ChaserPage {
         Ok(ids.into_iter().map(|id| id.into()).collect())
     }
 
+    // ========== Shadow DOM 内操作（穿透 shadow root） ==========
+    //
+    // 普通 querySelector 不能穿透 shadow boundary。反爬会把关键内容藏进 shadow root
+    // （含 closed 模式）让传统爬虫失效。本组方法走 CDP DOM 域的 describeNode(pierce=true)
+    // 拿到 shadow root 的 nodeId，再在其内部 querySelector——对 open/closed shadow root
+    // 都有效（closed 封装是 JS 层限制，CDP 协议层无视），且不触发 Runtime.enable（stealth-safe）。
+
+    /// 在指定宿主元素的 shadow root 内查找元素（单层穿透）。
+    ///
+    /// `host_selector` 定位带 shadow root 的宿主元素（如自定义组件），
+    /// `inner_selector` 在 shadow root 内部按 CSS 查找。对 open 和 closed shadow root
+    /// 都有效。
+    ///
+    /// # 示例
+    /// ```rust,ignore
+    /// // 在 <my-widget> 的 shadow root 内找 .price
+    /// let el = chaser.find_in_shadow("my-widget", ".price").await?;
+    /// ```
+    pub async fn find_in_shadow(
+        &self,
+        host_selector: &str,
+        inner_selector: &str,
+    ) -> Result<crate::element::Element> {
+        // 1. 找到宿主元素
+        let host = self
+            .page
+            .find_element(host_selector)
+            .await
+            .map_err(|e| anyhow!("找不到宿主元素 '{}': {}", host_selector, e))?;
+        // 2. describeNode(pierce=true) 拿 shadow root 的 nodeId
+        let shadow_root_id = self.first_shadow_root_id(host.node_id).await?;
+        // 3. 在 shadow root 内 querySelector
+        self.page
+            .find_element_in_root(inner_selector, shadow_root_id)
+            .await
+            .map_err(|e| anyhow!("shadow root 内找不到 '{}': {}", inner_selector, e))
+    }
+
+    /// 多层穿透查找：按 `>>>` 分隔的选择器链逐层进入 shadow root。
+    ///
+    /// 适合嵌套的 shadow DOM 结构（组件套组件）。
+    ///
+    /// # 示例
+    /// ```rust,ignore
+    /// // 三层穿透：host >>> inner-host >>> target
+    /// let el = chaser.find_in_shadow_deep("outer-widget >>> inner-widget >>> .btn").await?;
+    /// ```
+    pub async fn find_in_shadow_deep(&self, selector: &str) -> Result<crate::element::Element> {
+        let parts: Vec<&str> = selector.split(">>>").map(|s| s.trim()).collect();
+        if parts.len() < 2 {
+            return Err(anyhow!(
+                "find_in_shadow_deep 选择器需含至少一个 '>>>' 分隔符，如 'host >>> .inner'"
+            ));
+        }
+        // 第一段：在主文档找宿主
+        let mut host = self
+            .page
+            .find_element(parts[0])
+            .await
+            .map_err(|e| anyhow!("找不到 '{}': {}", parts[0], e))?;
+        // 中间各段：在当前宿主的 shadow root 内找下一层宿主
+        for part in &parts[1..parts.len() - 1] {
+            let shadow_root_id = self.first_shadow_root_id(host.node_id).await?;
+            host = self
+                .page
+                .find_element_in_root(part.to_string(), shadow_root_id)
+                .await
+                .map_err(|e| anyhow!("shadow root 内找不到 '{}': {}", part, e))?;
+        }
+        // 最后一段：在最深 shadow root 内找目标
+        let final_sel = parts[parts.len() - 1];
+        let shadow_root_id = self.first_shadow_root_id(host.node_id).await?;
+        self.page
+            .find_element_in_root(final_sel.to_string(), shadow_root_id)
+            .await
+            .map_err(|e| anyhow!("最深 shadow root 内找不到 '{}': {}", final_sel, e))
+    }
+
+    /// 用 describeNode(pierce=true) 获取指定节点的第一个 shadow root 的 nodeId。
+    async fn first_shadow_root_id(
+        &self,
+        node_id: chromiumoxide_cdp::cdp::browser_protocol::dom::NodeId,
+    ) -> Result<chromiumoxide_cdp::cdp::browser_protocol::dom::NodeId> {
+        use chromiumoxide_cdp::cdp::browser_protocol::dom::DescribeNodeParams;
+        let resp = self
+            .page
+            .execute(
+                DescribeNodeParams::builder()
+                    .node_id(node_id)
+                    .depth(1)
+                    .pierce(true)
+                    .build(),
+            )
+            .await
+            .map_err(|e| anyhow!("describeNode 失败: {}", e))?;
+        let shadow_roots = resp.result.node.shadow_roots.ok_or_else(|| {
+            anyhow!("元素没有 shadow root（可能不是 shadow host，或 shadow root 尚未挂载）")
+        })?;
+        let first = shadow_roots
+            .into_iter()
+            .next()
+            .ok_or_else(|| anyhow!("元素声明了 shadow_roots 但为空数组"))?;
+        Ok(first.node_id)
+    }
+
     /// 按匹配条件找到第一个 iframe，返回 [`ZyFrame`] 句柄。
     ///
     /// `matcher` 是闭包，接收 (frame_url, frame_name)，返回 true 即匹配。

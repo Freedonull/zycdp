@@ -506,7 +506,7 @@ impl ChaserProfile {
                 // 11. AudioContext 指纹对抗
                 // 问题：headless/服务器环境无真实音频设备，AudioContext 用软件实现，
                 // 产生的样本哈希与真实桌面不同（CreepJS/FingerprintJS/DataDome 检测点）。
-                // 解法：对 AnalyserNode.getFloatFrequencyData 和 AudioBuffer.getChannelData
+                // 解法：对 AudioBuffer.getChannelData 注入确定性噪声（真实反爬音频
                 // 注入确定性微小噪声。噪声基于固定种子，同一会话内稳定一致，避免 Castle
                 // 噪声检测（多次采样比对随机性）识破。注意：噪声幅度极小（1e-7 级），
                 // 不影响音频实际播放，只改变指纹哈希。
@@ -525,18 +525,10 @@ impl ChaserProfile {
                         t ^= t + (t << 7) | (t >>> 9);
                         return ((t & 0xffffff) / 0x1000000 - 0.5) * 1e-7;
                     }}
-                    if (typeof AnalyserNode !== 'undefined') {{
-                        var origGetFloat = AnalyserNode.prototype.getFloatFrequencyData;
-                        AnalyserNode.prototype.getFloatFrequencyData = function(array) {{
-                            origGetFloat.apply(this, arguments);
-                            for (var i = 0; i < array.length; i++) {{
-                                array[i] += noise(i);
-                            }}
-                        }};
-                    }}
-                    // AudioBuffer.getChannelData：指纹脚本常用 OfflineAudioContext 渲染后读取。
-                    // 加噪会改变返回的 Float32Array，但不影响离线渲染（离线 context 不实时播放）。
-                    // 实时 context 极少调 getChannelData（用 AudioBufferSourceNode），风险低。
+                    // AudioBuffer.getChannelData：真实反爬音频指纹（CreepJS/FingerprintJS）
+                    // 的主路径——OfflineAudioContext 渲染后读 getChannelData 哈希。
+                    // 注：不 patch AnalyserNode.getFloatFrequencyData——静默 analyser 默认
+                    // 返回 -Infinity，噪声加上去仍是 -Infinity（IEEE754），是无效死代码。
                     if (typeof AudioBuffer !== 'undefined' && AudioBuffer.prototype.getChannelData) {{
                         var origGetChannel = AudioBuffer.prototype.getChannelData;
                         AudioBuffer.prototype.getChannelData = function(channel) {{
@@ -742,11 +734,8 @@ impl ChaserProfile {
                     if (navigator.serviceWorker) maskAsNative(navigator.serviceWorker.register, 'register');
                 } catch (_) {}
 
-                // AudioContext 对抗 patch 的函数
+                // AudioContext 对抗 patch 的函数（仅 getChannelData，analyser 是死代码已删）
                 try {
-                    if (typeof AnalyserNode !== 'undefined') {
-                        maskAsNative(AnalyserNode.prototype.getFloatFrequencyData, 'getFloatFrequencyData');
-                    }
                     if (typeof AudioBuffer !== 'undefined' && AudioBuffer.prototype.getChannelData) {
                         maskAsNative(AudioBuffer.prototype.getChannelData, 'getChannelData');
                     }
